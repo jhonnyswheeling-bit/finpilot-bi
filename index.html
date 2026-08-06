@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinPilot BI — Dashboard Financeiro Inteligente</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ AUTH VIEW ============ -->
+<div id="authView" class="min-h-screen flex items-center justify-center p-5">
+  <div class="w-full max-w-md fade-in">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 10px 30px -8px rgba(99,102,241,.6);">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/></svg>
+      </div>
+      <h1 class="text-3xl font-extrabold tracking-tight">FinPilot BI</h1>
+      <p class="text-muted mt-2 text-sm" id="authSubtitle">Entre para acessar seu dashboard financeiro.</p>
+    </div>
+
+    <div id="authCard" class="card p-6">
+
+      <div id="authMsg" class="hidden mb-4 p-3 rounded-xl text-sm font-semibold"></div>
+
+      <!-- checando sessão -->
+      <div id="authChecking" class="text-center text-sm text-muted py-6">Verificando sessão...</div>
+
+      <!-- LOGIN -->
+      <form id="loginForm" class="hidden space-y-3" onsubmit="return Auth.doLogin(event)">
+        <div>
+          <label class="text-xs font-semibold text-muted">E-mail</label>
+          <input type="email" id="loginEmail" class="input mt-1" required autocomplete="email">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted">Senha</label>
+          <input type="password" id="loginPassword" class="input mt-1" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary w-full justify-center">Entrar</button>
+        <button type="button" class="btn w-full justify-center" onclick="Auth.doGoogleLogin()">
+          <svg width="15" height="15" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47c-.28 1.5-1.13 2.77-2.4 3.62v3h3.88c2.27-2.09 3.57-5.17 3.57-8.8z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.9l-3.88-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.27v3.11C3.25 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.29A7.2 7.2 0 014.9 12c0-.79.14-1.56.37-2.29V6.6H1.27A11.98 11.98 0 000 12c0 1.94.46 3.77 1.27 5.4l4-3.11z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.7 1.27 6.6l4 3.11C6.22 6.86 8.87 4.75 12 4.75z"/></svg>
+          Continuar com Google
+        </button>
+        <div class="flex items-center justify-between text-xs pt-1">
+          <button type="button" class="text-muted hover:underline" onclick="Auth.showRecover()">Esqueci minha senha</button>
+          <button type="button" class="font-semibold" style="color:var(--accent);" onclick="Auth.showSignup()">Criar conta</button>
+        </div>
+        <div id="resendConfirmBox" class="hidden p-3 rounded-xl text-xs" style="background:var(--warning-soft);border:1px solid var(--warning);color:var(--text);">
+          Ainda não recebeu? Verifique também as pastas <strong>Spam</strong> e <strong>Promoções</strong>.
+          <button type="button" class="btn btn-sm w-full justify-center mt-2" onclick="Auth.doResendConfirmation()">Reenviar e-mail de confirmação</button>
+        </div>
+      </form>
+
+      <!-- CADASTRO -->
+      <form id="signupForm" class="hidden space-y-3" onsubmit="return Auth.doSignup(event)">
+        <div>
+          <label class="text-xs font-semibold text-muted">Nome</label>
+          <input type="text" id="signupName" class="input mt-1" autocomplete="name">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted">E-mail</label>
+          <input type="email" id="signupEmail" class="input mt-1" required autocomplete="email">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted">Senha</label>
+          <input type="password" id="signupPassword" class="input mt-1" required minlength="6" autocomplete="new-password">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted">Confirmar senha</label>
+          <input type="password" id="signupPasswordConfirm" class="input mt-1" required minlength="6" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary w-full justify-center">Criar conta</button>
+        <div class="text-center text-xs pt-1">
+          Já tem conta? <button type="button" class="font-semibold" style="color:var(--accent);" onclick="Auth.showLogin()">Entrar</button>
+        </div>
+      </form>
+
+      <!-- RECUPERAR SENHA -->
+      <form id="recoverForm" class="hidden space-y-3" onsubmit="return Auth.doRecover(event)">
+        <p class="text-xs text-muted">Informe seu e-mail — vamos enviar um link para redefinir sua senha.</p>
+        <div>
+          <label class="text-xs font-semibold text-muted">E-mail</label>
+          <input type="email" id="recoverEmail" class="input mt-1" required autocomplete="email">
+        </div>
+        <button type="submit" class="btn btn-primary w-full justify-center">Enviar link de recuperação</button>
+        <div class="text-center text-xs pt-1">
+          <button type="button" class="font-semibold" style="color:var(--accent);" onclick="Auth.showLogin()">Voltar ao login</button>
+        </div>
+      </form>
+
+      <!-- DEFINIR NOVA SENHA (após clicar no link do e-mail) -->
+      <form id="newPasswordForm" class="hidden space-y-3" onsubmit="return Auth.doSetNewPassword(event)">
+        <p class="text-xs text-muted">Defina sua nova senha de acesso.</p>
+        <div>
+          <label class="text-xs font-semibold text-muted">Nova senha</label>
+          <input type="password" id="newPassword" class="input mt-1" required minlength="6" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary w-full justify-center">Salvar nova senha</button>
+      </form>
+
+      <!-- CADASTRO CONCLUÍDO — aguardando confirmação de e-mail -->
+      <div id="signupSuccessBox" class="hidden text-center space-y-3">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-full mx-auto" style="background:var(--accent-soft);">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 6l8 7 8-7"/></svg>
+        </div>
+        <h2 class="text-lg font-bold">Quase lá! Confirme seu e-mail</h2>
+        <p class="text-sm text-muted">
+          Enviamos um link de confirmação para <strong id="signupSuccessEmail" class="text-inherit"></strong>.
+          Abra o e-mail e clique no link para ativar sua conta antes de entrar.
+        </p>
+        <p class="text-xs text-muted p-3 rounded-xl" style="background:var(--warning-soft);border:1px solid var(--warning);">
+          Não encontrou o e-mail? Verifique as pastas <strong>Spam</strong> e <strong>Promoções</strong> — às vezes ele cai por lá.
+        </p>
+        <button type="button" class="btn w-full justify-center" onclick="Auth.showLogin()">Voltar ao login</button>
+      </div>
+
+      <!-- CONTA ATIVADA — exibida após o clique no link de confirmação -->
+      <div id="emailConfirmedView" class="hidden text-center space-y-3">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-full mx-auto" style="background:var(--success-soft);">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h2 class="text-lg font-bold">Conta ativada com sucesso!</h2>
+        <p class="text-sm text-muted">Seu e-mail foi confirmado. Agora você já pode acessar o seu dashboard financeiro.</p>
+        <button type="button" class="btn btn-primary w-full justify-center" onclick="Auth.continueAfterConfirmation()">Entrar no FinPilot BI</button>
+      </div>
+
+    </div>
+    <p class="text-center text-muted text-xs mt-6">100% dos seus dados de análise continuam locais no navegador — a conta é usada apenas para proteger seu acesso.</p>
+  </div>
+</div>
+
+<!-- ============ UPLOAD VIEW ============ -->
+<div id="uploadView" class="hidden min-h-screen flex items-center justify-center p-5">
+  <div class="w-full max-w-3xl fade-in">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 10px 30px -8px rgba(99,102,241,.6);">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/></svg>
+      </div>
+      <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">FinPilot BI</h1>
+      <p class="text-muted mt-2 text-sm md:text-base">Envie uma planilha Excel ou CSV e receba um dashboard executivo completo — KPIs, gráficos, rankings e comparativos gerados automaticamente.</p>
+    </div>
+
+    <div id="dropzone" class="dropzone card p-10 text-center cursor-pointer">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" class="mx-auto mb-3"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+      <p class="font-semibold">Arraste seu arquivo aqui</p>
+      <p class="text-muted text-sm mt-1">ou clique para selecionar — .xlsx, .xls ou .csv</p>
+      <div id="fileNameLabel" class="text-sm text-muted mt-3"></div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 text-xs">
+      <div class="card p-3 flex items-center gap-2"><span class="kpi-icon" style="width:30px;height:30px;background:var(--accent-soft);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 19V9M12 19V5M20 19v-7"/></svg></span>KPIs automáticos</div>
+      <div class="card p-3 flex items-center gap-2"><span class="kpi-icon" style="width:30px;height:30px;background:var(--success-soft);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></span>Detecção inteligente</div>
+      <div class="card p-3 flex items-center gap-2"><span class="kpi-icon" style="width:30px;height:30px;background:var(--warning-soft);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M3 12l4-4 4 4 6-6 4 4"/></svg></span>Gráficos e rankings</div>
+      <div class="card p-3 flex items-center gap-2"><span class="kpi-icon" style="width:30px;height:30px;background:var(--danger-soft);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><path d="M12 3v12M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg></span>Exporta Excel/PDF</div>
+    </div>
+    <p class="text-center text-muted text-xs mt-6">100% local no seu navegador — seus dados não saem do computador.</p>
+
+    <div class="text-center mt-5">
+      <button class="btn" onclick="App.startManualMode()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Ou comece do zero — lançar receitas e gastos manualmente
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CONFIG VIEW ============ -->
+<div id="configView" class="hidden min-h-screen p-4 md:p-8">
+  <div class="max-w-6xl mx-auto fade-in">
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div>
+        <h2 class="text-xl font-bold">Configurar dados</h2>
+        <p class="text-muted text-sm" id="configFileLabel"></p>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1"><div class="step-dot active" id="stepDot1">1</div><span class="text-xs text-muted hidden md:inline">Cabeçalho</span></div>
+        <div class="w-6 h-px" style="background:var(--border);"></div>
+        <div class="flex items-center gap-1"><div class="step-dot" id="stepDot2">2</div><span class="text-xs text-muted hidden md:inline">Colunas</span></div>
+        <div class="w-6 h-px" style="background:var(--border);"></div>
+        <div class="flex items-center gap-1"><div class="step-dot" id="stepDot3">3</div><span class="text-xs text-muted hidden md:inline">Transformar</span></div>
+      </div>
+    </div>
+
+    <div id="sheetTabsWrap" class="mb-4 hidden"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+      <div class="lg:col-span-3 card p-4">
+        <h3 class="font-bold text-sm mb-1">① Selecione a linha de cabeçalho</h3>
+        <p class="text-muted text-xs mb-3">Detectamos automaticamente a linha mais provável. Clique em outra linha para corrigir.</p>
+        <div class="overflow-auto rounded-xl border-base" style="max-height:420px;border:1px solid var(--border);">
+          <table class="data-table" id="headerPreviewTable"></table>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2 card p-4">
+        <h3 class="font-bold text-sm mb-1">② Tipos de coluna</h3>
+        <p class="text-muted text-xs mb-3">Ajuste o tipo detectado e ative "preencher vazios" para colunas hierárquicas (categorias mescladas).</p>
+        <div id="columnConfigList" class="space-y-2 overflow-auto" style="max-height:420px;"></div>
+      </div>
+    </div>
+
+    <div class="card p-4 mt-5" id="unpivotSection">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 class="font-bold text-sm">③ Transformar períodos em linhas (unpivot)</h3>
+          <p class="text-muted text-xs mt-1">Detectamos colunas que parecem períodos (ex: meses). Transformá-las em linhas gera uma métrica "Valor" pronta para análise por período.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-semibold text-muted" id="unpivotStatusLabel">desativado</span>
+          <div class="switch" id="unpivotSwitch"><div class="knob"></div></div>
+        </div>
+      </div>
+      <div id="unpivotBody" class="mt-4 hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs font-semibold text-muted">Colunas de valor (serão transformadas em linhas)</label>
+            <div id="unpivotValueCols" class="flex flex-wrap gap-2 mt-2"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-muted">Nome da nova coluna (período)</label>
+              <input id="unpivotVarName" class="input mt-1" value="Período">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Nome da nova coluna (valor)</label>
+              <input id="unpivotValName" class="input mt-1" value="Valor">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex justify-between mt-6">
+      <button class="btn" onclick="App.backToUpload()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Trocar arquivo
+      </button>
+      <button class="btn btn-primary" onclick="App.generateDashboard()">
+        Gerar dashboard
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP VIEW ============ -->
+<div id="appView" class="hidden min-h-screen lg:flex">
+  <div id="sidebarOverlay" onclick="App.toggleSidebar(false)"></div>
+  <aside id="sidebar" class="w-64 flex-shrink-0 p-4 flex flex-col gap-1 border-r border-base bg-panel">
+    <div class="flex items-center gap-2 px-2 mb-5">
+      <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/></svg>
+      </div>
+      <div class="min-w-0">
+        <div class="font-bold text-sm leading-tight">FinPilot BI</div>
+        <div class="text-xs text-muted truncate" id="sidebarFileName">arquivo.xlsx</div>
+      </div>
+    </div>
+
+    <div class="text-xs font-bold text-muted uppercase tracking-wide px-2 mb-1 mt-2">Navegação</div>
+    <div class="sidebar-link active" data-section="dashboard" onclick="App.goSection('dashboard')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      Visão geral
+    </div>
+    <div class="sidebar-link" data-section="table" onclick="App.goSection('table')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
+      Tabela dinâmica
+    </div>
+    <div class="sidebar-link" data-section="analysis" onclick="App.goSection('analysis')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 6h7v7"/></svg>
+      Comparativos &amp; Ranking
+    </div>
+    <div class="sidebar-link" data-section="entries" onclick="App.goSection('entries')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      Lançamentos
+    </div>
+    <div class="sidebar-link" data-section="goals" onclick="App.goSection('goals')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>
+      Metas
+    </div>
+
+    <div class="text-xs font-bold text-muted uppercase tracking-wide px-2 mb-1 mt-5">Dados</div>
+    <div class="sidebar-link" onclick="App.goConfig()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852 1 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Reconfigurar colunas
+    </div>
+    <div class="sidebar-link" onclick="App.backToUpload()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg>
+      Novo arquivo
+    </div>
+
+    <div class="mt-auto pt-4 border-t border-base px-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-muted flex items-center gap-1">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          Modo escuro
+        </span>
+        <div class="switch" id="darkSwitch" onclick="App.toggleDark()"><div class="knob"></div></div>
+      </div>
+      <div class="flex items-center justify-between mt-3">
+        <span class="text-xs text-muted truncate" id="sidebarUserEmail" title=""></span>
+        <button class="btn btn-ghost btn-sm" title="Sair" onclick="Auth.doLogout()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 min-w-0 flex flex-col">
+    <header id="topbar" class="sticky top-0 z-20 bg-panel border-b border-base px-4 py-3 flex items-center gap-3 flex-wrap">
+      <button class="btn btn-ghost btn-sm lg:hidden" onclick="App.toggleSidebar(true)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h1 class="font-bold text-lg" id="pageTitle">Visão geral</h1>
+
+      <div class="flex-1 min-w-[160px] max-w-sm ml-0 md:ml-4">
+        <div class="relative">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" class="absolute left-3 top-1/2 -translate-y-1/2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input id="globalSearch" class="input" style="padding-left:2.1rem;" placeholder="Buscar em todos os registros...">
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto flex-wrap">
+        <select id="metricSelect" class="input" style="width:auto;" onchange="App.onMetricChange(this.value)"></select>
+        <button class="btn btn-sm no-print" onclick="App.exportExcel()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg>
+          Excel
+        </button>
+        <button class="btn btn-sm no-print" onclick="window.print()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a1 1 0 01-1-1v-5a1 1 0 011-1h16a1 1 0 011 1v5a1 1 0 01-1 1h-2"/><path d="M6 14h12v7H6z"/></svg>
+          PDF
+        </button>
+      </div>
+    </header>
+
+    <main id="mainContent" class="flex-1 overflow-auto p-4 md:p-6">
+      <div id="errorBanner" class="hidden mb-4 p-3 rounded-xl text-sm font-semibold" style="background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger);"></div>
+
+      <!-- DASHBOARD SECTION -->
+      <section id="section-dashboard" class="fade-in">
+
+        <!-- ===== VISÃO GERAL (FinPilot BI v1.1 + v1.2 Humanização — apenas adição) ===== -->
+        <div class="mb-5">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h2 id="saudacaoTexto" class="text-lg font-bold flex items-center gap-2">👋 Visão Geral</h2>
+            <button class="btn btn-ghost btn-sm" title="Informar seu nome" onclick="App.promptUserName()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+            </button>
+          </div>
+          <div id="subtituloDia" class="text-sm text-muted mt-0.5"></div>
+          <div id="fraseMotivacional" class="text-sm font-semibold mt-1.5"></div>
+
+          <!-- Destaque grande: quanto posso gastar hoje -->
+          <div id="destaqueGastoHoje" class="p-5 rounded-2xl mt-3" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 10px 30px -10px rgba(99,102,241,.5);"></div>
+
+          <!-- Alerta de previsão para o fim do mês -->
+          <div id="alertaFimMes" class="mt-3"></div>
+
+          <div id="visaoGeralGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4"></div>
+        </div>
+
+        <div class="card p-4 mb-5">
+          <h3 class="font-bold text-sm mb-3">Resumo do mês passado</h3>
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div id="resumoMesPassadoStats" class="xl:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+            <div style="height:160px;position:relative;">
+              <canvas id="chartResumoMesPassado"></canvas>
+              <div id="chartResumoMesPassadoEmpty" class="hidden absolute inset-0 flex items-center justify-center text-muted text-xs text-center px-2">Sem dados de meses anteriores ainda.</div>
+            </div>
+          </div>
+        </div>
+        <!-- ===== FIM VISÃO GERAL ===== -->
+
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <label class="text-xs font-semibold text-muted">Categoria dos gráficos:</label>
+          <select id="dimSelectDashboard" class="input" style="width:auto;" onchange="App.onDimChange(this.value)"></select>
+          <label class="text-xs font-semibold text-muted ml-2">Período:</label>
+          <select id="periodSelectDashboard" class="input" style="width:auto;" onchange="App.onPeriodChange(this.value)"></select>
+        </div>
+        <div id="filtersBar" class="flex flex-wrap gap-2 mb-4"></div>
+        <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5"></div>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+          <div class="card p-4 xl:col-span-2">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold text-sm" id="chartTimeTitle">Evolução por período</h3>
+              <div class="flex items-center gap-1 no-print" id="chartTimeToggle"></div>
+            </div>
+            <div style="height:280px;position:relative;">
+              <canvas id="chartTime"></canvas>
+              <div id="chartTimeEmpty" class="hidden absolute inset-0 flex items-center justify-center text-muted text-sm text-center px-4">Nenhuma coluna de período/data detectada.</div>
+            </div>
+          </div>
+          <div class="card p-4">
+            <h3 class="font-bold text-sm mb-3" id="chartDonutTitle">Distribuição</h3>
+            <div style="height:280px;position:relative;">
+              <canvas id="chartDonut"></canvas>
+              <div id="chartDonutEmpty" class="hidden absolute inset-0 flex items-center justify-center text-muted text-sm text-center px-4">Nenhuma coluna de categoria detectada.</div>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div class="card p-4">
+            <h3 class="font-bold text-sm mb-3" id="chartBarTitle">Total por categoria</h3>
+            <div style="height:300px;position:relative;">
+              <canvas id="chartBar"></canvas>
+              <div id="chartBarEmpty" class="hidden absolute inset-0 flex items-center justify-center text-muted text-sm text-center px-4">Nenhuma coluna de categoria detectada.</div>
+            </div>
+          </div>
+          <div class="card p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold text-sm">Top 10 — Ranking</h3>
+            </div>
+            <div id="miniRanking" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- DIAGNÓSTICO FINANCEIRO (novo bloco — apenas adição) -->
+        <div class="card p-4 mt-4">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h3 class="font-bold text-sm flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M12 8v4l3 3"/></svg>
+              Diagnóstico Financeiro
+            </h3>
+            <span class="text-xs text-muted">Gerado automaticamente a partir dos dados atuais</span>
+          </div>
+
+          <div class="text-xs font-bold uppercase tracking-wide mb-2 flex items-center gap-1" style="color:var(--success);">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M12 5l-6 6M12 5l6 6"/></svg>
+            Entradas (Receitas)
+          </div>
+          <div id="diagnosticoCardsEntrada" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"></div>
+
+          <div class="text-xs font-bold uppercase tracking-wide mb-2 flex items-center gap-1" style="color:var(--danger);">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M12 19l-6-6M12 19l6-6"/></svg>
+            Saídas (Despesas)
+          </div>
+          <div id="diagnosticoCardsSaida" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"></div>
+
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div class="xl:col-span-2">
+              <h4 class="font-bold text-xs text-muted uppercase tracking-wide mb-2">Insights (Entradas &amp; Saídas)</h4>
+              <div id="diagnosticoInsights" class="space-y-2"></div>
+              <div id="diagnosticoAlertas" class="space-y-2 mt-3"></div>
+            </div>
+            <div>
+              <h4 class="font-bold text-xs text-muted uppercase tracking-wide mb-2">Concentração de saídas (Top 5)</h4>
+              <div style="height:220px;position:relative;">
+                <canvas id="chartDiagnostico"></canvas>
+                <div id="chartDiagnosticoEmpty" class="hidden absolute inset-0 flex items-center justify-center text-muted text-sm text-center px-4">Sem dados suficientes para o diagnóstico.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- FIM DIAGNÓSTICO FINANCEIRO -->
+      </section>
+
+      <!-- TABLE SECTION -->
+      <section id="section-table" class="hidden fade-in">
+        <div class="card p-4">
+          <div class="flex flex-wrap items-center gap-2 mb-3" id="filtersBarTable"></div>
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="text-sm text-muted" id="tableSummary"></div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-muted">Linhas por página</label>
+              <select id="pageSizeSelect" class="input" style="width:auto;" onchange="App.setPageSize(this.value)">
+                <option>10</option><option selected>25</option><option>50</option><option>100</option>
+              </select>
+            </div>
+          </div>
+          <div class="overflow-auto rounded-xl border-base" style="max-height:60vh;border:1px solid var(--border);">
+            <table class="data-table" id="dataTable"></table>
+          </div>
+          <div class="flex items-center justify-between mt-3 flex-wrap gap-2">
+            <div class="text-xs text-muted" id="paginationInfo"></div>
+            <div class="flex items-center gap-1" id="paginationControls"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ANALYSIS SECTION -->
+      <section id="section-analysis" class="hidden fade-in">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4" id="comparisonCards"></div>
+        <div class="card p-4 mb-4">
+          <h3 class="font-bold text-sm mb-3">Comparativo entre períodos</h3>
+          <div style="height:260px;"><canvas id="chartComparison"></canvas></div>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h3 class="font-bold text-sm">Ranking completo por <span id="rankDimLabel"></span></h3>
+            <select id="rankDimSelect" class="input" style="width:auto;" onchange="App.onDimChange(this.value)"></select>
+          </div>
+          <div id="fullRanking" class="space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- ENTRIES / MANUAL LAUNCH SECTION -->
+      <section id="section-entries" class="hidden fade-in">
+        <div class="card p-4 mb-4">
+          <h3 class="font-bold text-sm mb-3">Novo lançamento</h3>
+          <form id="entryForm" onsubmit="App.addManualEntry(event)" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 items-end">
+            <div class="col-span-2 md:col-span-1">
+              <label class="text-xs font-semibold text-muted">Tipo</label>
+              <select id="entryTipo" class="input mt-1">
+                <option>Receita</option>
+                <option>Investimento</option>
+                <option selected>Gasto Fixo</option>
+                <option>Gasto Variável</option>
+                <option>Extra</option>
+                <option>Outro</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Categoria</label>
+              <input id="entryCategoria" class="input mt-1" list="categoriaSuggestions" placeholder="Habitação...">
+              <datalist id="categoriaSuggestions">
+                <option value="Habitação"><option value="Transporte"><option value="Saúde">
+                <option value="Educação"><option value="Alimentação"><option value="Impostos">
+                <option value="Cuidados pessoais"><option value="Lazer"><option value="Vestuário">
+                <option value="Salário"><option value="Investimentos"><option value="Outros">
+              </datalist>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Subcategoria</label>
+              <input id="entrySubcategoria" class="input mt-1" placeholder="opcional">
+            </div>
+            <div class="col-span-2 md:col-span-1">
+              <label class="text-xs font-semibold text-muted">Item / Descrição</label>
+              <input id="entryItem" class="input mt-1" placeholder="Aluguel, Supermercado..." required>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Mês</label>
+              <select id="entryMes" class="input mt-1"></select>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Ano</label>
+              <input id="entryAno" type="number" class="input mt-1">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Valor (R$)</label>
+              <input id="entryValor" type="number" step="0.01" min="0" class="input mt-1" placeholder="0,00" required>
+            </div>
+            <div class="col-span-2 md:col-span-4 xl:col-span-7">
+              <button type="submit" class="btn btn-primary">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Adicionar lançamento
+              </button>
+              <span class="text-xs text-muted ml-2" id="entryMergeHint"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4" id="entrySummaryGrid"></div>
+
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h3 class="font-bold text-sm">Lançamentos manuais (<span id="entryCount">0</span>)</h3>
+            <div class="flex items-center gap-2">
+              <select id="entryFilterMes" class="input" style="width:auto;" onchange="App.renderEntriesSection()"><option value="Todos">Todos os meses</option></select>
+              <select id="entryFilterAno" class="input" style="width:auto;" onchange="App.renderEntriesSection()"><option value="Todos">Todos os anos</option></select>
+            </div>
+          </div>
+          <div class="overflow-auto rounded-xl border-base" style="max-height:50vh;border:1px solid var(--border);">
+            <table class="data-table" id="entriesTable"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- GOALS / METAS SECTION -->
+      <section id="section-goals" class="hidden fade-in">
+        <div class="card p-4 mb-4">
+          <h3 class="font-bold text-sm mb-3">Nova meta financeira</h3>
+          <form id="goalForm" onsubmit="App.addGoal(event)" class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div class="col-span-2">
+              <label class="text-xs font-semibold text-muted">Nome da meta</label>
+              <input id="goalNome" class="input mt-1" placeholder="Reserva de emergência, Viagem..." required>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Valor total (R$)</label>
+              <input id="goalValorTotal" type="number" step="0.01" min="0.01" class="input mt-1" placeholder="0,00" required>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Valor já juntado (R$)</label>
+              <input id="goalValorAtual" type="number" step="0.01" min="0" class="input mt-1" placeholder="0,00" value="0">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-muted">Data limite</label>
+              <input id="goalDataLimite" type="date" class="input mt-1" required>
+            </div>
+            <div class="col-span-2 md:col-span-1">
+              <button type="submit" class="btn btn-primary w-full justify-center">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Adicionar meta
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="goalsSummaryGrid"></div>
+
+        <div id="goalsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>
