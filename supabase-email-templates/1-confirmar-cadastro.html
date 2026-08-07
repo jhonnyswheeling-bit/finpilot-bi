@@ -1,0 +1,59 @@
+<!--
+  Assunto sugerido: Confirme seu e-mail e ative sua conta no FinPilot BI
+  Onde colar: Supabase → Authentication → Email Templates → Confirm signup
+  Variável usada: {{ .ConfirmationURL }} (gerada automaticamente pelo Supabase)
+-->
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Confirme seu e-mail — FinPilot BI</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;">
+<span style="display:none;font-size:1px;color:#f1f5f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Confirme seu e-mail para ativar sua conta no FinPilot BI.</span>
+<div style="background-color:#f1f5f9;padding:32px 16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+    <tr>
+      <td style="padding:32px 36px 0 36px;text-align:center;">
+        <div style="display:inline-block;width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#8b5cf6);line-height:56px;font-size:24px;color:#ffffff;font-weight:700;">FB</div>
+        <h1 style="margin:20px 0 4px 0;font-size:22px;color:#0f172a;font-weight:800;">FinPilot BI</h1>
+        <p style="margin:0;font-size:13px;color:#64748b;">Transformando números em decisões inteligentes.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:28px 36px 8px 36px;">
+        <h2 style="margin:0 0 12px 0;font-size:18px;color:#0f172a;">Falta pouco para começar 🎉</h2>
+        <p style="margin:0 0 16px 0;font-size:14px;line-height:1.6;color:#334155;">
+          Olá! Recebemos seu cadastro no <strong>FinPilot BI</strong>. Para ativar sua conta e começar a organizar suas finanças com clareza, confirme seu e-mail clicando no botão abaixo.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:8px 36px 24px 36px;text-align:center;">
+        <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 28px;border-radius:10px;">Confirmar meu e-mail</a>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 36px 28px 36px;">
+        <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;background:#fffbeb;border:1px solid #f59e0b;border-radius:10px;padding:12px 14px;">
+          Não encontrou este e-mail na caixa de entrada? Dê uma olhada nas pastas <strong>Spam</strong> e <strong>Promoções</strong> — às vezes ele acaba lá.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 36px 32px 36px;border-top:1px solid #e2e8f0;">
+        <p style="margin:20px 0 0 0;font-size:12px;line-height:1.6;color:#94a3b8;">
+          Se você não criou esta conta, pode ignorar este e-mail com segurança.
+        </p>
+        <p style="margin:16px 0 0 0;font-size:13px;line-height:1.6;color:#334155;">
+          Equipe FinPilot BI<br>
+          <span style="color:#64748b;">Transformando números em decisões inteligentes.</span>
+        </p>
+      </td>
+    </tr>
+  </table>
+</div>
+</body>
+</html>
