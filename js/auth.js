@@ -223,7 +223,7 @@ const Auth = {
     // o comportamento esperado, não um bug.
     if(data && data.user && data.user.identities && data.user.identities.length===0){
       // Ocorre quando o e-mail já existe mas está associado a outro provedor
-      // (ex: Google) — o Supabase não avisa via "error" nesse caso específico.
+      // (ex: login social) — o Supabase não avisa via "error" nesse caso específico.
       authLog("doSignup: e-mail já vinculado a uma conta existente (identities vazio).");
       this.showMsg("Este e-mail já está cadastrado. Tente entrar ou recuperar sua senha.", "error");
       return false;
@@ -265,17 +265,6 @@ const Auth = {
     if(error){ this.showMsg(this.translateError(error), "error"); return false; }
     this.showMsg("Senha atualizada com sucesso!", "success");
     return false;
-  },
-
-  async doGoogleLogin(){
-    this.clearMsg();
-    // Estrutura pronta — só funciona após ativar o provedor Google
-    // em Authentication > Providers no painel do Supabase.
-    const {error}=await supabaseClient.auth.signInWithOAuth({
-      provider:"google",
-      options:{ redirectTo: window.location.origin }
-    });
-    if(error){ this.showMsg(this.translateError(error), "error"); }
   },
 
   async doLogout(){

@@ -59,9 +59,9 @@ npx serve .
 python3 -m http.server 8080
 ```
 
-Abrir `index.html` diretamente pelo navegador (file://) também funciona na
-maior parte dos casos, mas alguns navegadores restringem o fluxo de OAuth
-(login com Google) em `file://` — prefira um servidor local para testar login.
+Abrir `index.html` diretamente pelo navegador (file://) também costuma
+funcionar, mas alguns navegadores restringem chamadas de rede nesse modo —
+prefira um servidor local para testar com segurança.
 
 ## Deploy na Vercel
 
