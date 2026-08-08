@@ -47,11 +47,16 @@ const Auth = {
     // fragmento da URL: #...type=signup).
     const url = window.location.href;
     this.pendingConfirmation = /type=signup/.test(url);
-    authLog("init() — url atual:", url, "| pendingConfirmation:", this.pendingConfirmation);
+    // Mesma ideia para o link de recuperação de senha (#...type=recovery).
+    // Serve como sinal inicial; o evento PASSWORD_RECOVERY abaixo é a
+    // fonte de verdade definitiva e também marca esta flag.
+    this.pendingRecovery = /type=recovery/.test(url);
+    authLog("init() — url atual:", url, "| pendingConfirmation:", this.pendingConfirmation, "| pendingRecovery:", this.pendingRecovery);
 
     supabaseClient.auth.onAuthStateChange((event, session)=>{
       authLog("onAuthStateChange:", event, session ? "(sessão presente)" : "(sem sessão)");
       if(event==="PASSWORD_RECOVERY"){
+        this.pendingRecovery = true;
         this.hideChecking();
         this.showForm("newPasswordForm");
         return;
@@ -63,15 +68,21 @@ const Auth = {
           this.showForm("emailConfirmedView");
           return;
         }
+        if(this.pendingRecovery){
+          // Ainda em contexto de recuperação de senha (ex: TOKEN_REFRESHED
+          // disparando enquanto o usuário está parado em newPasswordForm).
+          // Não deixar ir para o Dashboard enquanto a senha não for definida.
+          return;
+        }
         this.onAuthenticated(session);
       }
       else if(event==="SIGNED_OUT" || event==="INITIAL_SESSION"){ this.onSignedOut(); }
     });
 
     supabaseClient.auth.getSession().then(({data})=>{
-      if(data.session && !this.pendingConfirmation){ this.onAuthenticated(data.session); }
+      if(data.session && !this.pendingConfirmation && !this.pendingRecovery){ this.onAuthenticated(data.session); }
       else if(!data.session){ this.onSignedOut(); }
-      // se houver sessão E pendingConfirmation, o onAuthStateChange acima já cuidou da tela.
+      // se houver sessão E pendingConfirmation/pendingRecovery, o onAuthStateChange acima já cuidou da tela.
     });
   },
 
