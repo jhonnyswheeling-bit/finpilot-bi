@@ -2,6 +2,11 @@
 
 /* ================= AUTENTICAÇÃO (Supabase) — Fase 1 (auditada) ================= */
 
+// Captura a URL original ANTES de criar o client — supabase.createClient()
+// já dispara processamento interno da URL (detectSessionInUrl), que pode
+// limpar o hash antes que nosso código tivesse chance de lê-la depois.
+const INITIAL_URL = window.location.href;
+
 // ===== Configuração do Supabase =====
 // Painel Supabase → seu projeto → Settings → API
 //   Project URL      → cole entre as aspas de SUPABASE_URL
@@ -45,7 +50,7 @@ const Auth = {
     // Detecta se o usuário chegou aqui vindo do link de confirmação de
     // cadastro do Supabase (o fluxo implícito coloca type=signup no
     // fragmento da URL: #...type=signup).
-    const url = window.location.href;
+    const url = INITIAL_URL;
     this.pendingConfirmation = /type=signup/.test(url);
     // Mesma ideia para o link de recuperação de senha (#...type=recovery).
     // Serve como sinal inicial; o evento PASSWORD_RECOVERY abaixo é a
