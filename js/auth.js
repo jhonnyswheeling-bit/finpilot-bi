@@ -7,6 +7,35 @@
 // limpar o hash antes que nosso código tivesse chance de lê-la depois.
 const INITIAL_URL = window.location.href;
 
+// [RECOVERY DEBUG] Instrumentação temporária para diagnóstico do fluxo de
+// recuperação de senha. Remover após a investigação. Mascara valores
+// sensíveis (tokens/código/senha) de uma URL antes de logar — mostra só
+// protocolo + domínio + caminho + nomes dos parâmetros (e valores não
+// sensíveis, como "type").
+function maskUrlForLog(rawUrl){
+  const SENSITIVE_KEYS = /^(access_token|refresh_token|provider_token|provider_refresh_token|code|password)$/i;
+  try{
+    const u = new URL(rawUrl);
+    const maskPart = (str)=>{
+      if(!str) return "(vazio)";
+      return str.split("&").map(pair=>{
+        const idx = pair.indexOf("=");
+        if(idx===-1) return pair;
+        const key = pair.slice(0, idx);
+        const val = pair.slice(idx+1);
+        return SENSITIVE_KEYS.test(key) ? key+"=***" : key+"="+val;
+      }).join("&");
+    };
+    const hash = u.hash ? u.hash.slice(1) : "";
+    const search = u.search ? u.search.slice(1) : "";
+    return u.origin+u.pathname+" | search:["+maskPart(search)+"] | hash:["+maskPart(hash)+"]";
+  } catch(e){
+    return "(não foi possível parsear a URL)";
+  }
+}
+console.log("[RECOVERY DEBUG] INITIAL_URL capturada:", maskUrlForLog(INITIAL_URL));
+console.log("[RECOVERY DEBUG] INITIAL_URL contém type=recovery?", /type=recovery/.test(INITIAL_URL));
+
 // ===== Configuração do Supabase =====
 // Painel Supabase → seu projeto → Settings → API
 //   Project URL      → cole entre as aspas de SUPABASE_URL
@@ -57,12 +86,24 @@ const Auth = {
     // fonte de verdade definitiva e também marca esta flag.
     this.pendingRecovery = /type=recovery/.test(url);
     authLog("init() — url atual:", url, "| pendingConfirmation:", this.pendingConfirmation, "| pendingRecovery:", this.pendingRecovery);
+    console.log("[RECOVERY DEBUG] Auth.init() — estado inicial:", {
+      pendingConfirmation: this.pendingConfirmation,
+      pendingRecovery: this.pendingRecovery,
+      INITIAL_URL: maskUrlForLog(INITIAL_URL)
+    });
 
     supabaseClient.auth.onAuthStateChange((event, session)=>{
       authLog("onAuthStateChange:", event, session ? "(sessão presente)" : "(sem sessão)");
+      console.log("[RECOVERY DEBUG] onAuthStateChange disparado:", {
+        event: event,
+        temSession: !!session,
+        pendingConfirmation: this.pendingConfirmation,
+        pendingRecovery: this.pendingRecovery
+      });
       if(event==="PASSWORD_RECOVERY"){
         this.pendingRecovery = true;
         this.hideChecking();
+        console.log("[RECOVERY DEBUG] Caminho PASSWORD_RECOVERY — chamando showForm(\"newPasswordForm\") agora.");
         this.showForm("newPasswordForm");
         return;
       }
@@ -77,15 +118,27 @@ const Auth = {
           // Ainda em contexto de recuperação de senha (ex: TOKEN_REFRESHED
           // disparando enquanto o usuário está parado em newPasswordForm).
           // Não deixar ir para o Dashboard enquanto a senha não for definida.
+          console.log("[RECOVERY DEBUG] onAuthStateChange: sessão presente mas pendingRecovery=true — onAuthenticated() BLOQUEADO neste caminho.");
           return;
         }
+        console.log("[RECOVERY DEBUG] onAuthStateChange: nenhuma guarda ativa — chamando onAuthenticated() a partir daqui (caminho A).");
         this.onAuthenticated(session);
       }
       else if(event==="SIGNED_OUT" || event==="INITIAL_SESSION"){ this.onSignedOut(); }
     });
 
     supabaseClient.auth.getSession().then(({data})=>{
-      if(data.session && !this.pendingConfirmation && !this.pendingRecovery){ this.onAuthenticated(data.session); }
+      const podeAutenticar = !!(data.session && !this.pendingConfirmation && !this.pendingRecovery);
+      console.log("[RECOVERY DEBUG] getSession().then() resolveu:", {
+        temSession: !!data.session,
+        pendingConfirmation: this.pendingConfirmation,
+        pendingRecovery: this.pendingRecovery,
+        condicaoParaOnAuthenticated: podeAutenticar
+      });
+      if(data.session && !this.pendingConfirmation && !this.pendingRecovery){
+        console.log("[RECOVERY DEBUG] getSession(): condição verdadeira — chamando onAuthenticated() a partir daqui (caminho B).");
+        this.onAuthenticated(data.session);
+      }
       else if(!data.session){ this.onSignedOut(); }
       // se houver sessão E pendingConfirmation/pendingRecovery, o onAuthStateChange acima já cuidou da tela.
     });
@@ -95,11 +148,18 @@ const Auth = {
   continueAfterConfirmation(){
     this.hideChecking();
     supabaseClient.auth.getSession().then(({data})=>{
-      if(data.session){ this.onAuthenticated(data.session); }
+      if(data.session){
+        console.log("[RECOVERY DEBUG] continueAfterConfirmation(): chamando onAuthenticated() a partir daqui (caminho C — clique manual do usuário).");
+        this.onAuthenticated(data.session);
+      }
     });
   },
 
   onAuthenticated(session){
+    console.log("[RECOVERY DEBUG] onAuthenticated() FOI CHAMADO.", {
+      pendingRecoveryNesteMomento: this.pendingRecovery,
+      email: session && session.user ? session.user.email : "(sem email)"
+    });
     this.hideChecking();
     $("authView").classList.add("hidden");
     $("uploadView").classList.remove("hidden");
@@ -107,6 +167,7 @@ const Auth = {
     if(emailEl){ emailEl.textContent=session.user.email||""; emailEl.title=session.user.email||""; }
     if(!this.appStarted){
       this.appStarted=true;
+      console.log("[RECOVERY DEBUG] App.init() será executado");
       App.init();
     }
   },
