@@ -1,0 +1,17 @@
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+
+# Vercel
+.vercel
+
+# Node (caso algum dia entre alguma tooling de build)
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log
