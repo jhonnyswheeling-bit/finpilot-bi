@@ -544,8 +544,9 @@
             <div class="col-span-2 md:col-span-4 xl:col-span-7">
               <button type="submit" class="btn btn-primary">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                Adicionar lançamento
+                <span id="entrySubmitLabel">Adicionar lançamento</span>
               </button>
+              <button type="button" id="entryCancelEditBtn" class="btn hidden" onclick="App.cancelEditManualEntry()">Cancelar edição</button>
               <span class="text-xs text-muted ml-2" id="entryMergeHint"></span>
             </div>
           </form>

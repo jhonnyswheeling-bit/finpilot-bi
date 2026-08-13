@@ -161,12 +161,17 @@ const Auth = {
       email: session && session.user ? session.user.email : "(sem email)"
     });
     this.hideChecking();
-    $("authView").classList.add("hidden");
-    $("uploadView").classList.remove("hidden");
     const emailEl=$("sidebarUserEmail");
     if(emailEl){ emailEl.textContent=session.user.email||""; emailEl.title=session.user.email||""; }
     if(!this.appStarted){
       this.appStarted=true;
+      // Só troca de tela (authView -> uploadView) na PRIMEIRA autenticação
+      // desta página. Eventos subsequentes com sessão (ex: TOKEN_REFRESHED,
+      // que pode disparar ao voltar para uma aba em segundo plano) não devem
+      // reabrir uploadView por cima da tela em que o usuário já está
+      // (ex: appView/dashboard) — essa era a causa da sobreposição de views.
+      $("authView").classList.add("hidden");
+      $("uploadView").classList.remove("hidden");
       console.log("[RECOVERY DEBUG] App.init() será executado");
       App.init();
     }
@@ -340,7 +345,12 @@ const Auth = {
     this._setBusy("newPassword", e.target, false);
 
     if(error){ this.showMsg(this.translateError(error), "error"); return false; }
-    this.showMsg("Senha atualizada com sucesso!", "success");
+    this.showMsg("Senha alterada com sucesso! Sua senha foi atualizada. Agora você já pode entrar na sua conta.", "success");
+    this.pendingRecovery = false;
+    setTimeout(async ()=>{
+      await supabaseClient.auth.signOut();
+      this.showLogin();
+    }, 1800);
     return false;
   },
 

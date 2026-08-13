@@ -3,8 +3,6 @@
 const MONTHS_PT = ["janeiro","fevereiro","março","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const MONTHS_ORDER = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const MONTHS_DISPLAY = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-const MANUAL_STORAGE_KEY = "databi_manual_entries_v1";
-const GOALS_STORAGE_KEY = "databi_goals_v1";
 const USERNAME_STORAGE_KEY = "databi_username_v1";
 const CHART_PALETTE = ["#6366f1","#8b5cf6","#0ea5e9","#10b981","#f59e0b","#ef4444","#ec4899","#14b8a6","#f97316","#84cc16","#a855f7","#22d3ee"];
 
@@ -19,7 +17,7 @@ const state = {
   finalData:[], uploadedFinalData:[], manualEntries:[], mode:"file", columnTypes:{}, columnCardinality:{},
   filters:{}, search:"", sort:{col:null,dir:1}, page:1, pageSize:25,
   metricCol:null, dimCol:null, periodCol:null, numericCols:[], categoryCols:[], dateCols:[],
-  dark:false, fileName:"", charts:{}, currentSection:"dashboard", timeChartType:"line", goals:[], userName:""
+  dark:false, fileName:"", charts:{}, currentSection:"dashboard", timeChartType:"line", goals:[], userName:"", editingEntryId:null
 };
 
 /* ---------------- Utilities ---------------- */
@@ -86,9 +84,9 @@ function monthIndex(label){
 
 /* ---------------- App: núcleo (upload, configuração, dados, navegação) ---------------- */
 const App = {
-  init(){
-    this.loadManualEntries();
-    this.loadGoals();
+  async init(){
+    await this.loadManualEntries();
+    await this.loadGoals();
     this.loadUserName();
     const mesSel=$("entryMes");
     if(mesSel){
@@ -560,16 +558,31 @@ const App = {
   },
 
   /* ---------------- Manual entries (Lançamentos) ---------------- */
-  loadManualEntries(){
+  async loadManualEntries(){
     try{
-      const raw=localStorage.getItem(MANUAL_STORAGE_KEY);
-      state.manualEntries = raw? JSON.parse(raw) : [];
-    }catch(e){ state.manualEntries=[]; }
+      const { data:{ session } } = await supabaseClient.auth.getSession();
+      if(!session){ state.manualEntries=[]; return; }
+      const { data, error } = await supabaseClient
+        .from("manual_entries")
+        .select("*")
+        .order("created_at", { ascending:true });
+      if(error){ console.error("Erro ao carregar lançamentos:", error.message); state.manualEntries=[]; return; }
+      state.manualEntries = (data||[]).map(row=>({
+        id: row.id,
+        tipo: row.tipo,
+        categoria: row.categoria,
+        subcategoria: row.subcategoria,
+        item: row.item,
+        mes: row.mes,
+        ano: row.ano,
+        valor: Number(row.valor)
+      }));
+    }catch(e){
+      console.error("Erro ao carregar lançamentos:", e);
+      state.manualEntries=[];
+    }
   },
-  saveManualEntries(){
-    try{ localStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(state.manualEntries)); }catch(e){ /* best effort */ }
-  },
-  startManualMode(){
+  async startManualMode(){
     state.mode="manual";
     state.fileName="Lançamentos manuais";
     state.metricCol="Valor"; state.periodCol="Mês"; state.dimCol="Item";
@@ -579,6 +592,8 @@ const App = {
     state.columnCardinality={};
     state.uploadedFinalData=[];
     state.filters={}; state.search=""; state.page=1; state.sort={col:null,dir:1};
+    await this.loadManualEntries();
+    await this.loadGoals();
     this.mergeManualEntries();
 
     $("uploadView").classList.add("hidden");
@@ -603,7 +618,7 @@ const App = {
     state.finalData=state.uploadedFinalData.concat(mapped);
     this.computeFinalColumnTypes();
   },
-  addManualEntry(evt){
+  async addManualEntry(evt){
     evt.preventDefault();
     const entry={
       tipo: $("entryTipo").value,
@@ -615,33 +630,142 @@ const App = {
       valor: parseNumberFlexible($("entryValor").value)
     };
     if(!entry.item || entry.valor==null || entry.valor<=0){ alert("Preencha ao menos Item/Descrição e um Valor válido."); return; }
-    state.manualEntries.push(entry);
-    this.saveManualEntries();
+
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    if(!session){ alert("Sua sessão expirou. Faça login novamente para salvar o lançamento."); return; }
+
+    if(state.editingEntryId){
+      const id=state.editingEntryId;
+      const { data, error } = await supabaseClient
+        .from("manual_entries")
+        .update({
+          tipo: entry.tipo,
+          categoria: entry.categoria,
+          subcategoria: entry.subcategoria,
+          item: entry.item,
+          mes: entry.mes,
+          ano: entry.ano,
+          valor: entry.valor
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if(error){
+        alert("Não foi possível salvar a edição do lançamento. Tente novamente.\n\n"+error.message);
+        return;
+      }
+
+      const idx=state.manualEntries.findIndex(e=>e.id===id);
+      if(idx>=0){
+        state.manualEntries[idx] = {
+          id: data.id, tipo: data.tipo, categoria: data.categoria, subcategoria: data.subcategoria,
+          item: data.item, mes: data.mes, ano: data.ano, valor: Number(data.valor)
+        };
+      }
+      this.cancelEditManualEntry();
+    } else {
+      const { data, error } = await supabaseClient
+        .from("manual_entries")
+        .insert({
+          user_id: session.user.id,
+          tipo: entry.tipo,
+          categoria: entry.categoria,
+          subcategoria: entry.subcategoria,
+          item: entry.item,
+          mes: entry.mes,
+          ano: entry.ano,
+          valor: entry.valor
+        })
+        .select()
+        .single();
+
+      if(error){
+        alert("Não foi possível salvar o lançamento. Tente novamente.\n\n"+error.message);
+        return;
+      }
+
+      state.manualEntries.push({
+        id: data.id,
+        tipo: data.tipo,
+        categoria: data.categoria,
+        subcategoria: data.subcategoria,
+        item: data.item,
+        mes: data.mes,
+        ano: data.ano,
+        valor: Number(data.valor)
+      });
+      $("entryItem").value=""; $("entrySubcategoria").value=""; $("entryValor").value="";
+      $("entryItem").focus();
+    }
+
     this.mergeManualEntries();
     this.populateSelectors();
-    $("entryItem").value=""; $("entrySubcategoria").value=""; $("entryValor").value="";
+    this.renderEntriesSection();
+    this.renderAll();
+  },
+  startEditManualEntry(id){
+    const entry=state.manualEntries.find(e=>e.id===id);
+    if(!entry) return;
+    state.editingEntryId=id;
+    $("entryTipo").value=entry.tipo;
+    $("entryCategoria").value=entry.categoria||"";
+    $("entrySubcategoria").value=entry.subcategoria||"";
+    $("entryItem").value=entry.item;
+    $("entryMes").value=entry.mes;
+    $("entryAno").value=entry.ano;
+    $("entryValor").value=entry.valor;
+    const label=$("entrySubmitLabel");
+    if(label) label.textContent="Salvar edição";
+    const cancelBtn=$("entryCancelEditBtn");
+    if(cancelBtn) cancelBtn.classList.remove("hidden");
     $("entryItem").focus();
-    this.renderEntriesSection();
-    this.renderAll();
   },
-  deleteManualEntry(idx){
+  cancelEditManualEntry(){
+    state.editingEntryId=null;
+    $("entryForm").reset();
+    const label=$("entrySubmitLabel");
+    if(label) label.textContent="Adicionar lançamento";
+    const cancelBtn=$("entryCancelEditBtn");
+    if(cancelBtn) cancelBtn.classList.add("hidden");
+  },
+  async deleteManualEntry(idx){
+    const entry=state.manualEntries[idx];
+    if(!entry || !entry.id) return;
+    const { error } = await supabaseClient.from("manual_entries").delete().eq("id", entry.id);
+    if(error){
+      alert("Não foi possível excluir o lançamento. Tente novamente.\n\n"+error.message);
+      return;
+    }
     state.manualEntries.splice(idx,1);
-    this.saveManualEntries();
+    if(state.editingEntryId===entry.id){ this.cancelEditManualEntry(); }
     this.mergeManualEntries();
     this.populateSelectors();
     this.renderEntriesSection();
     this.renderAll();
   },
-  loadGoals(){
+  async loadGoals(){
     try{
-      const raw=localStorage.getItem(GOALS_STORAGE_KEY);
-      state.goals = raw? JSON.parse(raw) : [];
-    }catch(e){ state.goals=[]; }
+      const { data:{ session } } = await supabaseClient.auth.getSession();
+      if(!session){ state.goals=[]; return; }
+      const { data, error } = await supabaseClient
+        .from("goals")
+        .select("*")
+        .order("data_limite", { ascending:true });
+      if(error){ console.error("Erro ao carregar metas:", error.message); state.goals=[]; return; }
+      state.goals = (data||[]).map(row=>({
+        id: row.id,
+        nome: row.nome,
+        valorTotal: Number(row.valor_total),
+        valorAtual: Number(row.valor_atual),
+        dataLimite: row.data_limite
+      }));
+    }catch(e){
+      console.error("Erro ao carregar metas:", e);
+      state.goals=[];
+    }
   },
-  saveGoals(){
-    try{ localStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(state.goals)); }catch(e){ /* best effort */ }
-  },
-  addGoal(evt){
+  async addGoal(evt){
     evt.preventDefault();
     const nome=$("goalNome").value.trim();
     const valorTotal=parseNumberFlexible($("goalValorTotal").value);
@@ -651,30 +775,94 @@ const App = {
       alert("Preencha nome, valor total e data limite corretamente.");
       return;
     }
+
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    if(!session){ alert("Sua sessão expirou. Faça login novamente para salvar a meta."); return; }
+
+    const { data, error } = await supabaseClient
+      .from("goals")
+      .insert({
+        user_id: session.user.id,
+        nome,
+        valor_total: valorTotal,
+        valor_atual: Math.max(0,valorAtual),
+        data_limite: dataLimite
+      })
+      .select()
+      .single();
+
+    if(error){
+      alert("Não foi possível salvar a meta. Tente novamente.\n\n"+error.message);
+      return;
+    }
+
     state.goals.push({
-      id: "g"+Date.now()+Math.random().toString(36).slice(2,7),
-      nome, valorTotal, valorAtual: Math.max(0,valorAtual), dataLimite
+      id: data.id,
+      nome: data.nome,
+      valorTotal: Number(data.valor_total),
+      valorAtual: Number(data.valor_atual),
+      dataLimite: data.data_limite
     });
-    this.saveGoals();
     $("goalForm").reset();
     $("goalValorAtual").value="0";
     this.renderGoals();
   },
-  deleteGoal(id){
+  async deleteGoal(id){
     if(!confirm("Excluir esta meta? Essa ação não pode ser desfeita.")) return;
+    const { error } = await supabaseClient.from("goals").delete().eq("id", id);
+    if(error){
+      alert("Não foi possível excluir a meta. Tente novamente.\n\n"+error.message);
+      return;
+    }
     state.goals = state.goals.filter(g=>g.id!==id);
-    this.saveGoals();
     this.renderGoals();
   },
-  updateGoalValue(id){
+  async updateGoalValue(id){
     const input=$("goalUpdate_"+id);
     if(!input) return;
     const novoValor=parseNumberFlexible(input.value);
     if(novoValor==null || novoValor<0){ alert("Informe um valor válido."); return; }
+    const { error } = await supabaseClient.from("goals").update({ valor_atual: novoValor }).eq("id", id);
+    if(error){
+      alert("Não foi possível atualizar a meta. Tente novamente.\n\n"+error.message);
+      return;
+    }
+    const g=state.goals.find(g=>g.id===id);
+    if(g) g.valorAtual=novoValor;
+    this.renderGoals();
+  },
+  async editGoal(id){
     const g=state.goals.find(g=>g.id===id);
     if(!g) return;
-    g.valorAtual=novoValor;
-    this.saveGoals();
+    const novoNome=prompt("Nome da meta:", g.nome);
+    if(novoNome===null) return;
+    const novoValorTotalStr=prompt("Valor total da meta (R$):", g.valorTotal);
+    if(novoValorTotalStr===null) return;
+    const novaDataLimite=prompt("Data limite (AAAA-MM-DD):", g.dataLimite);
+    if(novaDataLimite===null) return;
+
+    const nome=novoNome.trim();
+    const valorTotal=parseNumberFlexible(novoValorTotalStr);
+    if(!nome || valorTotal==null || valorTotal<=0 || !/^\d{4}-\d{2}-\d{2}$/.test(novaDataLimite)){
+      alert("Dados inválidos. A edição foi cancelada e nada foi alterado.");
+      return;
+    }
+
+    const { data, error } = await supabaseClient
+      .from("goals")
+      .update({ nome, valor_total: valorTotal, data_limite: novaDataLimite })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if(error){
+      alert("Não foi possível salvar a edição da meta. Tente novamente.\n\n"+error.message);
+      return;
+    }
+
+    g.nome=data.nome;
+    g.valorTotal=Number(data.valor_total);
+    g.dataLimite=data.data_limite;
     this.renderGoals();
   },
   computeGoalStatus(g){

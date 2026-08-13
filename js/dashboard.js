@@ -219,7 +219,12 @@ Object.assign(App, {
         <td>${esc(r.tipo)}</td><td>${esc(r.categoria)}</td><td>${esc(r.subcategoria)}</td>
         <td>${esc(r.item)}</td><td>${esc(r.mes)}</td><td>${esc(r.ano)}</td>
         <td>${fmtCurrency(r.valor)}</td>
-        <td><button class="btn btn-sm btn-danger" onclick="App.deleteManualEntry(${r._idx})">Excluir</button></td>
+        <td>
+          <button class="btn btn-sm" title="Editar lançamento" onclick="App.startEditManualEntry('${r.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="App.deleteManualEntry(${r._idx})">Excluir</button>
+        </td>
       </tr>`).join("")+"</tbody>";
     $("entriesTable").innerHTML=thead+(rows.length?tbody:"<tbody><tr><td colspan='8' class='text-center text-muted py-4'>Nenhum lançamento ainda.</td></tr></tbody>");
   },
@@ -263,6 +268,9 @@ Object.assign(App, {
           <h4 class="font-bold text-sm leading-snug">${esc(g.nome)}</h4>
           <div class="flex items-center gap-1 flex-shrink-0">
             <span class="badge" style="background:${st.bg};color:${st.color};">${status}</span>
+            <button class="btn btn-ghost btn-sm" title="Editar meta" onclick="App.editGoal('${g.id}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
             <button class="btn btn-ghost btn-sm btn-danger" title="Excluir meta" onclick="App.deleteGoal('${g.id}')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
             </button>
