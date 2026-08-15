@@ -291,6 +291,16 @@
       Novo arquivo
     </div>
 
+    <div class="text-xs font-bold text-muted uppercase tracking-wide px-2 mb-1 mt-5">Conta</div>
+    <div class="sidebar-link" data-section="account" onclick="Account.showPanel('account')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"/></svg>
+      Minha conta
+    </div>
+    <div class="sidebar-link hidden" id="adminNavLink" data-section="admin" onclick="Account.showPanel('admin')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z"/></svg>
+      Administração
+    </div>
+
     <div class="mt-auto pt-4 border-t border-base px-2">
       <div class="flex items-center justify-between">
         <span class="text-xs font-semibold text-muted flex items-center gap-1">
@@ -603,7 +613,68 @@
         <div id="goalsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
       </section>
 
+      <!-- ============ MINHA CONTA (Fase 3) ============ -->
+      <section id="section-account" class="hidden fade-in">
+        <div class="card p-6 max-w-lg">
+          <h3 class="font-bold text-base mb-4">Minha conta</h3>
+          <div class="space-y-3 text-sm">
+            <div>
+              <div class="text-xs text-muted font-semibold">Nome</div>
+              <div id="accountName" class="font-medium">—</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted font-semibold">E-mail</div>
+              <div id="accountEmail" class="font-medium">—</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted font-semibold">Plano atual</div>
+              <div id="accountPlan" class="font-medium">—</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted font-semibold">Status da conta</div>
+              <div id="accountStatus" class="font-medium">—</div>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-5 pt-4 border-t border-base">
+            <button class="btn" onclick="Account.changePassword()">Alterar senha</button>
+            <button class="btn btn-danger" onclick="Auth.doLogout()">Sair da conta</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ADMINISTRAÇÃO (Fase 3) ============ -->
+      <section id="section-admin" class="hidden fade-in">
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5" id="adminMetricsGrid"></div>
+        <div class="card p-4 mb-4">
+          <h3 class="font-bold text-sm mb-3">Usuários</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm" id="adminUsersTable"><tbody></tbody></table>
+          </div>
+        </div>
+        <div class="card p-4">
+          <h3 class="font-bold text-sm mb-3">Planos</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm" id="adminPlansTable"><tbody></tbody></table>
+          </div>
+        </div>
+      </section>
+
     </main>
+  </div>
+</div>
+
+<!-- ============ TRIAL EXPIRADO (Fase 3) ============ -->
+<div id="trialBlockedView" class="hidden min-h-screen flex items-center justify-center p-5">
+  <div class="w-full max-w-md fade-in text-center">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+    </div>
+    <h1 class="text-2xl font-extrabold mb-2">Seu período de teste terminou</h1>
+    <p class="text-muted text-sm mb-6">Assine o FinPilot BI Pro para continuar acessando seu dashboard e adicionando novos lançamentos e metas. Seus dados continuam salvos com segurança.</p>
+    <div class="card p-5 text-left space-y-3">
+      <button class="btn btn-primary w-full justify-center" disabled title="Cobrança ainda não disponível">Assinar FinPilot BI Pro (em breve)</button>
+      <button class="btn w-full justify-center" onclick="Auth.doLogout()">Sair</button>
+    </div>
   </div>
 </div>
 
@@ -611,5 +682,6 @@
 <script src="js/dashboard.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/auth.js?v=2"></script>
+<script src="js/account.js"></script>
 </body>
 </html>
