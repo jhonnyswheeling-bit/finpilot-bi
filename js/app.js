@@ -22,6 +22,47 @@ const state = {
 
 /* ---------------- Utilities ---------------- */
 function $(id){return document.getElementById(id);}
+
+/* ---------------- Controle central de views ---------------- */
+// Única função responsável por alternar entre as 4 views principais.
+// Sempre esconde as 4 antes de mostrar a solicitada — torna impossível,
+// por construção, duas views principais ficarem visíveis ao mesmo tempo,
+// não importa de onde showView() seja chamada (login, logout, TOKEN_REFRESHED,
+// volta de aba, navegação interna, etc).
+const MAIN_VIEW_IDS = { auth:"authView", upload:"uploadView", app:"appView", config:"configView", blocked:"trialBlockedView" };
+function showView(name){
+  Object.values(MAIN_VIEW_IDS).forEach(id=>{
+    const el=$(id);
+    if(el) el.classList.add("hidden");
+  });
+  const targetId=MAIN_VIEW_IDS[name];
+  if(!targetId){ console.warn("showView: nome de view desconhecido:", name); return; }
+  const el=$(targetId);
+  if(el) el.classList.remove("hidden");
+}
+
+// Limpa todo o estado financeiro/de sessão em memória — usada no logout e
+// antes de carregar os dados de um novo usuário, para garantir que nada do
+// usuário anterior fique disponível mesmo se o reload da página deixar de
+// existir no futuro. Não toca em configurações que não são dados
+// financeiros (dark mode, userName).
+function clearFinancialState(){
+  if(typeof App!=="undefined" && App.destroyChart){
+    Object.keys(state.charts||{}).forEach(id=>App.destroyChart(id));
+  }
+  state.manualEntries=[];
+  state.goals=[];
+  state.finalData=[];
+  state.uploadedFinalData=[];
+  state.editingEntryId=null;
+  state.mode="file";
+  state.fileName="";
+  state.workbook=null; state.sheetNames=[]; state.sheetName=null; state.rawGrid=[];
+  state.headerRowIndex=0; state.headers=[]; state.columnConfig=[];
+  state.dataRows=[];
+  state.filters={}; state.search=""; state.page=1; state.sort={col:null,dir:1};
+}
+
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function isBlank(v){return v===null||v===undefined||(typeof v==="string"&&v.trim()==="");}
 
@@ -85,6 +126,18 @@ function monthIndex(label){
 /* ---------------- App: núcleo (upload, configuração, dados, navegação) ---------------- */
 const App = {
   async init(){
+    clearFinancialState();
+    // Fase 3: verifica trial/assinatura antes de liberar o app.
+    // Se Account não existir por algum motivo (script não carregado),
+    // não bloqueia — trata como acesso liberado (falha aberta, não fecha
+    // o produto por um problema de infraestrutura de billing).
+    if(typeof Account!=="undefined"){
+      const hasAccess = await Account.init();
+      if(hasAccess===false){
+        showView("blocked");
+        return;
+      }
+    }
     await this.loadManualEntries();
     await this.loadGoals();
     this.loadUserName();
@@ -115,8 +168,7 @@ const App = {
         state.workbook=wb; state.sheetNames=wb.SheetNames;
         this.loadSheet(wb.SheetNames[0]);
         $("configFileLabel").textContent=file.name+" · "+wb.SheetNames.length+" aba(s)";
-        $("uploadView").classList.add("hidden");
-        $("configView").classList.remove("hidden");
+        showView("config");
         this.renderSheetTabs();
       }catch(err){
         alert("Não foi possível ler o arquivo. Verifique se é um Excel/CSV válido.\n\n"+err.message);
@@ -280,15 +332,13 @@ const App = {
     $("unpivotBody").classList.toggle("hidden",!state.unpivot.enabled);
   },
   backToUpload(){
-    $("configView").classList.add("hidden");
-    $("appView").classList.add("hidden");
-    $("uploadView").classList.remove("hidden");
+    this.cancelEditManualEntry();
+    showView("upload");
     $("fileInput").value="";
     $("fileNameLabel").textContent="";
   },
   goConfig(){
-    $("appView").classList.add("hidden");
-    $("configView").classList.remove("hidden");
+    showView("config");
   },
 
   /* ---------------- Build dataset ---------------- */
@@ -417,8 +467,7 @@ const App = {
       this.mergeManualEntries();
       state.filters={}; state.search=""; state.page=1; state.sort={col:null,dir:1};
 
-      $("configView").classList.add("hidden");
-      $("appView").classList.remove("hidden");
+      showView("app");
       $("sidebarFileName").textContent=state.fileName;
 
       this.populateSelectors();
@@ -446,15 +495,23 @@ const App = {
   /* ---------------- Navigation ---------------- */
   goSection(sec){
     state.currentSection=sec;
-    ["dashboard","table","analysis","entries","goals"].forEach(s=>{
-      $("section-"+s).classList.toggle("hidden", s!==sec);
+    ["dashboard","table","analysis","entries","goals","account"].forEach(s=>{
+      const el=$("section-"+s);
+      if(el) el.classList.toggle("hidden", s!==sec);
     });
+    // Defensivo: esconde um eventual painel administrativo antigo em
+    // cache, caso ainda exista no DOM de uma versão anterior.
+    const admEl=$("section-admin"); if(admEl) admEl.classList.add("hidden");
     document.querySelectorAll(".sidebar-link[data-section]").forEach(el=>{
       el.classList.toggle("active", el.dataset.section===sec);
     });
-    const titles={dashboard:"Visão geral",table:"Tabela dinâmica",analysis:"Comparativos & Ranking",entries:"Lançamentos",goals:"Metas"};
+    const titles={dashboard:"Visão geral",table:"Tabela dinâmica",analysis:"Comparativos & Ranking",entries:"Lançamentos",goals:"Metas",account:"Minha conta"};
     $("pageTitle").textContent=titles[sec];
     this.toggleSidebar(false);
+    if(sec==="account"){
+      if(typeof Account!=="undefined" && Account.refreshPanel){ Account.refreshPanel(); }
+      return; // Minha Conta não é seção financeira — não chama renderAll().
+    }
     this.renderAll();
   },
   toggleSidebar(open){
@@ -596,9 +653,8 @@ const App = {
     await this.loadGoals();
     this.mergeManualEntries();
 
-    $("uploadView").classList.add("hidden");
-    $("appView").classList.remove("hidden");
     $("sidebarFileName").textContent=state.fileName;
+    showView("app");
     this.populateSelectors();
     this.goSection("entries");
   },

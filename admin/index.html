@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administração — FinPilot BI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  body{background:var(--bg);color:var(--text);}
+  .chip{padding:.4rem .9rem;border-radius:999px;font-size:.8rem;font-weight:700;cursor:pointer;background:var(--bg-soft);color:var(--muted);border:1px solid var(--border);}
+  .chip.active{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;border-color:transparent;}
+  .data-table th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);padding:.5rem .6rem;}
+  .data-table td{padding:.5rem .6rem;}
+</style>
+</head>
+<body>
+
+<!-- ============ VERIFICANDO SESSÃO ============ -->
+<div id="adminChecking" class="min-h-screen flex items-center justify-center">
+  <p class="text-muted text-sm">Verificando acesso...</p>
+</div>
+
+<!-- ============ NEGADO: sem sessão ============ -->
+<div id="adminNoSession" class="hidden min-h-screen flex items-center justify-center p-5">
+  <div class="card p-6 max-w-sm text-center">
+    <h1 class="font-bold text-lg mb-2">Você precisa entrar</h1>
+    <p class="text-muted text-sm mb-4">Faça login no FinPilot BI para acessar esta área.</p>
+    <a href="/" class="btn btn-primary w-full justify-center">Ir para o login</a>
+  </div>
+</div>
+
+<!-- ============ NEGADO: sem role admin ============ -->
+<div id="adminDenied" class="hidden min-h-screen flex items-center justify-center p-5">
+  <div class="card p-6 max-w-sm text-center">
+    <h1 class="font-bold text-lg mb-2">Acesso restrito</h1>
+    <p class="text-muted text-sm mb-4">Esta área é exclusiva para administradores.</p>
+    <a href="/" class="btn btn-primary w-full justify-center">Voltar ao FinPilot BI</a>
+  </div>
+</div>
+
+<!-- ============ PAINEL ADMIN ============ -->
+<div id="adminApp" class="hidden min-h-screen">
+  <header class="border-b border-base p-4 flex items-center justify-between flex-wrap gap-3">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/></svg>
+      </div>
+      <span class="font-extrabold">FinPilot BI <span class="text-muted font-medium">· Administração</span></span>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/" class="btn btn-ghost btn-sm">← Voltar ao app</a>
+      <button class="btn btn-danger btn-sm" onclick="AdminAuth.logout()">Sair</button>
+    </div>
+  </header>
+
+  <main class="p-4 md:p-6">
+    <div class="flex flex-wrap gap-2 mb-5">
+      <button class="chip active" data-admintab="overview" onclick="AdminPanel.showTab('overview')">Visão geral</button>
+      <button class="chip" data-admintab="users" onclick="AdminPanel.showTab('users')">Usuários</button>
+      <button class="chip" data-admintab="plans" onclick="AdminPanel.showTab('plans')">Planos</button>
+      <button class="chip" data-admintab="subs" onclick="AdminPanel.showTab('subs')">Assinaturas</button>
+      <button class="chip" data-admintab="metrics" onclick="AdminPanel.showTab('metrics')">Métricas</button>
+    </div>
+
+    <div id="admintab-overview" class="admintab">
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3" id="adminOverviewGrid"></div>
+    </div>
+
+    <div id="admintab-users" class="admintab hidden">
+      <div class="card p-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm data-table" id="adminUsersTable"><thead><tr>
+            <th>Nome</th><th>E-mail</th><th>Cadastro</th><th>Plano</th><th>Status</th><th>Role</th><th>Trial até</th><th>Ações</th>
+          </tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div id="admintab-plans" class="admintab hidden">
+      <div class="card p-4 mb-4">
+        <h3 class="font-bold text-sm mb-3">Novo plano</h3>
+        <form onsubmit="AdminPanel.createPlan(event)" class="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <input class="input" id="newPlanName" placeholder="Nome" required>
+          <input class="input" id="newPlanPrice" type="number" step="0.01" min="0" placeholder="Preço (R$)" required>
+          <select class="input" id="newPlanPeriod"><option value="monthly">Mensal</option><option value="yearly">Anual</option></select>
+          <select class="input" id="newPlanActive"><option value="true">Ativo</option><option value="false">Inativo</option></select>
+          <button type="submit" class="btn btn-primary">Criar plano</button>
+        </form>
+      </div>
+      <div class="card p-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm data-table" id="adminPlansTable"><thead><tr>
+            <th>Nome</th><th>Preço</th><th>Periodicidade</th><th>Status</th><th>Ações</th>
+          </tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div id="admintab-subs" class="admintab hidden">
+      <div class="card p-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm data-table" id="adminSubsTable"><thead><tr>
+            <th>Usuário</th><th>Plano</th><th>Status</th><th>Início período</th><th>Fim período</th><th>Trial até</th><th>Provider</th><th>ID externo</th><th>Ações</th>
+          </tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div id="admintab-metrics" class="admintab hidden">
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mb-4" id="adminMetricsGrid"></div>
+      <div class="card p-4">
+        <h3 class="font-bold text-sm mb-3">Distribuição por plano</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm data-table" id="adminPlanDistTable"><thead><tr><th>Plano</th><th>Assinantes</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/admin/admin.js"></script>
+</body>
+</html>

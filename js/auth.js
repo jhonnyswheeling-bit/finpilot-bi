@@ -103,6 +103,7 @@ const Auth = {
       if(event==="PASSWORD_RECOVERY"){
         this.pendingRecovery = true;
         this.hideChecking();
+        showView("auth");
         console.log("[RECOVERY DEBUG] Caminho PASSWORD_RECOVERY — chamando showForm(\"newPasswordForm\") agora.");
         this.showForm("newPasswordForm");
         return;
@@ -111,6 +112,7 @@ const Auth = {
         if(this.pendingConfirmation){
           this.pendingConfirmation=false;
           this.hideChecking();
+          showView("auth");
           this.showForm("emailConfirmedView");
           return;
         }
@@ -170,8 +172,7 @@ const Auth = {
       // que pode disparar ao voltar para uma aba em segundo plano) não devem
       // reabrir uploadView por cima da tela em que o usuário já está
       // (ex: appView/dashboard) — essa era a causa da sobreposição de views.
-      $("authView").classList.add("hidden");
-      $("uploadView").classList.remove("hidden");
+      showView("upload");
       console.log("[RECOVERY DEBUG] App.init() será executado");
       App.init();
     }
@@ -179,10 +180,8 @@ const Auth = {
 
   onSignedOut(){
     this.hideChecking();
-    $("uploadView").classList.add("hidden");
-    $("configView").classList.add("hidden");
-    $("appView").classList.add("hidden");
-    $("authView").classList.remove("hidden");
+    clearFinancialState();
+    showView("auth");
     this.showForm("loginForm");
   },
 
@@ -355,6 +354,7 @@ const Auth = {
   },
 
   async doLogout(){
+    clearFinancialState();
     await supabaseClient.auth.signOut();
     // Recarrega para garantir que nenhum dado da sessão anterior
     // (state em memória do App) sobreviva no navegador.
