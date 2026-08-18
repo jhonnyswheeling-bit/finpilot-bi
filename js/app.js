@@ -127,6 +127,11 @@ function monthIndex(label){
 const App = {
   async init(){
     clearFinancialState();
+    // Nome vem de public.profiles.user_name — precisa estar carregado
+    // ANTES do Account.init() (que chama refreshPanel() internamente),
+    // senão "Minha conta"/o Dashboard renderizam com state.userName
+    // ainda vazio. Essa ordem era a causa do nome sumir após F5.
+    await this.loadUserName();
     // Fase 3: verifica trial/assinatura antes de liberar o app.
     // Se Account não existir por algum motivo (script não carregado),
     // não bloqueia — trata como acesso liberado (falha aberta, não fecha
@@ -140,7 +145,6 @@ const App = {
     }
     await this.loadManualEntries();
     await this.loadGoals();
-    this.loadUserName();
     const mesSel=$("entryMes");
     if(mesSel){
       mesSel.innerHTML=MONTHS_DISPLAY.map(m=>`<option ${m===MONTHS_DISPLAY[new Date().getMonth()]?'selected':''}>${m}</option>`).join("");
@@ -928,18 +932,49 @@ const App = {
     if(limite && limite<today) return "Atrasada";
     return "Em andamento";
   },
-  loadUserName(){
-    try{ state.userName = localStorage.getItem(USERNAME_STORAGE_KEY) || ""; }catch(e){ state.userName=""; }
+  async loadUserName(){
+    try{
+      const { data:{ session } } = await supabaseClient.auth.getSession();
+      if(!session){ state.userName=""; return; }
+      const { data, error } = await supabaseClient
+        .from("profiles").select("user_name").eq("id", session.user.id).maybeSingle();
+      if(error){ console.error("Erro ao carregar nome do usuário:", error.message); }
+      if(!error && data && data.user_name){
+        state.userName = data.user_name;
+        return;
+      }
+      // Fallback opcional — só usado se o Supabase não retornar nada
+      // (ex: falha de rede). O banco continua sendo a fonte oficial.
+      try{ state.userName = localStorage.getItem(USERNAME_STORAGE_KEY) || ""; }catch(e){ state.userName=""; }
+    }catch(e){
+      console.error("Erro ao carregar nome do usuário:", e);
+      try{ state.userName = localStorage.getItem(USERNAME_STORAGE_KEY) || ""; }catch(e2){ state.userName=""; }
+    }
   },
-  saveUserName(){
-    try{ localStorage.setItem(USERNAME_STORAGE_KEY, state.userName||""); }catch(e){ /* best effort */ }
+  async saveUserName(novoNome){
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    if(!session){ alert("Sua sessão expirou. Faça login novamente para salvar seu nome."); return false; }
+    const { error } = await supabaseClient
+      .from("profiles")
+      .update({ user_name: novoNome })
+      .eq("id", session.user.id); // nunca aceita user_id vindo de input — sempre a sessão real
+    if(error){
+      alert("Não foi possível salvar seu nome. Tente novamente.\n\n"+error.message);
+      return false;
+    }
+    // Só atualiza a interface depois da confirmação do Supabase.
+    state.userName = novoNome;
+    try{ localStorage.setItem(USERNAME_STORAGE_KEY, novoNome||""); }catch(e){ /* best effort, cache opcional */ }
+    return true;
   },
-  promptUserName(){
+  async promptUserName(){
     const val=prompt("Como podemos te chamar?", state.userName||"");
-    if(val!=null){
-      state.userName=val.trim();
-      this.saveUserName();
+    if(val==null) return;
+    const novoNome=val.trim();
+    const ok = await this.saveUserName(novoNome);
+    if(ok){
       this.renderVisaoGeral();
+      if(typeof Account!=="undefined" && Account.refreshPanel){ Account.refreshPanel(); }
     }
   },
 };

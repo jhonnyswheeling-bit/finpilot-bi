@@ -38,23 +38,89 @@ function showScreen(name){
 const AdminAuth = {
   async init(){
     showScreen("adminChecking");
+    const diag = { sessao:"não encontrada", usuario:"—", userId:"—", perfil:"não encontrado", role:"—", erro:"—" };
     try{
+      // 1) Sessão
       const { data:{ session } } = await supabaseClient.auth.getSession();
-      if(!session){ showScreen("adminNoSession"); return; }
+      if(!session){
+        showScreen("adminNoSession");
+        console.log("[AdminAuth] Sem sessão — usuário precisa fazer login em /");
+        return;
+      }
+      diag.sessao = "encontrada";
 
+      // 2) Confirma o usuário autenticado NO SERVIDOR (não confia só no
+      // token local) — é mais confiável que ler session.user direto.
+      const { data:{ user }, error: userError } = await supabaseClient.auth.getUser();
+      if(userError || !user){
+        diag.erro = userError ? userError.message : "getUser() não retornou usuário";
+        console.error("[AdminAuth] Falha ao confirmar usuário no servidor:", userError);
+        this._renderDiag(diag);
+        showScreen("adminDenied");
+        return;
+      }
+      diag.usuario = user.email || "—";
+      diag.userId = user.id;
+
+      // 3) Consulta o perfil para checar o role
       const { data: profile, error } = await supabaseClient
-        .from("profiles").select("role").eq("id", session.user.id).maybeSingle();
+        .from("profiles").select("role").eq("id", user.id).maybeSingle();
 
-      if(error){ console.error("Erro ao verificar perfil administrativo:", error.message); showScreen("adminDenied"); return; }
-      if(!profile || profile.role !== "admin"){ showScreen("adminDenied"); return; }
+      if(error){
+        diag.erro = error.message || "erro desconhecido";
+        console.error("[AdminAuth] Erro ao consultar profiles:", {
+          code: error.code, message: error.message, details: error.details, hint: error.hint
+        });
+        this._renderDiag(diag);
+        showScreen("adminDenied");
+        return;
+      }
 
+      if(!profile){
+        diag.perfil = "não encontrado";
+        diag.erro = "Perfil administrativo não encontrado para este usuário.";
+        console.error("[AdminAuth] Perfil não encontrado para user_id:", user.id);
+        this._renderDiag(diag);
+        showScreen("adminDenied");
+        return;
+      }
+
+      diag.perfil = "encontrado";
+      diag.role = profile.role || "—";
+
+      if(profile.role !== "admin"){
+        console.log("[AdminAuth] Usuário autenticado, mas role não é admin:", profile.role);
+        this._renderDiag(diag);
+        showScreen("adminDenied");
+        return;
+      }
+
+      // 4) Liberado
       showScreen("adminApp");
       AdminPanel.showTab("overview");
     }catch(e){
-      console.error("Falha ao verificar acesso administrativo:", e);
+      diag.erro = e && e.message ? e.message : String(e);
+      console.error("[AdminAuth] Falha inesperada ao verificar acesso administrativo:", e);
+      this._renderDiag(diag);
       showScreen("adminDenied");
     }
   },
+
+  // Diagnóstico temporário, só na tela de "acesso restrito" — nunca
+  // mostra senha, token, access_token ou refresh_token.
+  _renderDiag(diag){
+    const box=$("adminDiagBox");
+    if(!box) return;
+    box.innerHTML =
+      "<div><strong>Sessão:</strong> "+esc(diag.sessao)+"</div>"+
+      "<div><strong>Usuário:</strong> "+esc(diag.usuario)+"</div>"+
+      "<div><strong>User ID:</strong> "+esc(diag.userId)+"</div>"+
+      "<div><strong>Perfil:</strong> "+esc(diag.perfil)+"</div>"+
+      "<div><strong>Role:</strong> "+esc(diag.role)+"</div>"+
+      "<div><strong>Erro Supabase:</strong> "+esc(diag.erro)+"</div>";
+    box.classList.remove("hidden");
+  },
+
   async logout(){
     await supabaseClient.auth.signOut();
     window.location.href = "/";
