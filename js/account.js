@@ -89,11 +89,6 @@ const Account = {
         periodEl.textContent = "—";
       }
     }
-    const cta=$("subscribeCTA");
-    if(cta){
-      const jaTemPagamento = this.subscription && this.subscription.provider === "efi";
-      cta.classList.toggle("hidden", !!jaTemPagamento);
-    }
   },
 
   async changePassword(){
