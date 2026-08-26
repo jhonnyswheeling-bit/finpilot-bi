@@ -89,6 +89,11 @@ const Account = {
         periodEl.textContent = "—";
       }
     }
+    const cta=$("subscribeCTA");
+    if(cta){
+      const jaTemPagamento = this.subscription && this.subscription.provider === "efi";
+      cta.classList.toggle("hidden", !!jaTemPagamento);
+    }
   },
 
   async changePassword(){
@@ -101,6 +106,36 @@ const Account = {
     const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
     if(error){ alert("Não foi possível alterar sua senha. Tente novamente.\n\n"+error.message); return; }
     alert("Senha alterada com sucesso!");
+  },
+
+  // ---------------- Solicitação de cancelamento ----------------
+  // Só orienta o cliente a contatar o suporte da Cakto — nunca altera
+  // subscription/payment/profile, nunca chama backend/API nenhuma.
+  showCancelModal(){
+    const emailEl = $("cancelModalEmail");
+    const mailtoBtn = $("cancelModalMailtoBtn");
+    const email = this.email || "";
+    if(emailEl) emailEl.textContent = email || "—";
+    if(mailtoBtn) mailtoBtn.href = this._buildCancelMailto(email);
+    const modal = $("cancelModal");
+    if(modal) modal.classList.remove("hidden");
+  },
+
+  hideCancelModal(){
+    const modal = $("cancelModal");
+    if(modal) modal.classList.add("hidden");
+  },
+
+  _buildCancelMailto(email){
+    const to = "compradores@cakto.com.br";
+    const subject = "Solicitação de cancelamento — FinPilot BI Pro";
+    const body =
+      "Olá, gostaria de solicitar o cancelamento da minha assinatura do FinPilot BI Pro.\n\n" +
+      "E-mail utilizado na compra:\n" + (email || "—") + "\n\n" +
+      "Obrigado.";
+    return "mailto:" + encodeURIComponent(to) +
+      "?subject=" + encodeURIComponent(subject) +
+      "&body=" + encodeURIComponent(body);
   }
 };
 
