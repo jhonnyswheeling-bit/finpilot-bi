@@ -635,12 +635,51 @@
               <div id="accountPeriod" class="font-medium">—</div>
             </div>
           </div>
+          <div id="subscribeCTA" class="hidden mt-4 p-3 rounded-xl text-sm" style="background:var(--accent-soft);">
+            Seu trial não tem forma de pagamento associada ainda.
+            <button class="btn btn-primary w-full justify-center mt-2" onclick="EfiCheckout.startCheckout()">Assinar FinPilot Pro — R$ 29,90/mês</button>
+          </div>
           <div class="flex flex-wrap gap-2 mt-5 pt-4 border-t border-base">
             <button class="btn" onclick="Account.changePassword()">Alterar senha</button>
             <button class="btn btn-danger" onclick="Auth.doLogout()">Sair da conta</button>
           </div>
+
+          <div class="mt-5 pt-4 border-t border-base">
+            <h4 class="font-bold text-sm mb-2">Gerenciar assinatura</h4>
+            <p class="text-sm text-muted mb-3">Precisa cancelar sua assinatura?</p>
+            <p class="text-xs text-muted mb-3">Para cancelar sua assinatura, envie uma solicitação para o suporte da Cakto utilizando o mesmo e-mail da sua compra. O cancelamento é processado pela Cakto e seu acesso permanece conforme as condições da assinatura.</p>
+            <button class="btn btn-ghost btn-sm" onclick="Account.showCancelModal()">Solicitar cancelamento</button>
+          </div>
         </div>
       </section>
+
+      <!-- ============ MODAL: Solicitação de cancelamento ============ -->
+      <div id="cancelModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,.45);">
+        <div class="card p-6 max-w-md w-full">
+          <h3 class="font-bold text-base mb-3">Solicitação de cancelamento</h3>
+          <p class="text-sm text-muted mb-4">Para cancelar sua assinatura, envie uma solicitação para o suporte da Cakto utilizando o mesmo e-mail da sua compra. O cancelamento é processado pela Cakto e seu acesso permanece conforme as condições da assinatura.</p>
+
+          <h4 class="font-bold text-xs uppercase tracking-wide text-muted mb-2">Como solicitar</h4>
+          <div class="text-sm space-y-2 mb-4">
+            <div><span class="text-muted">Para:</span> <span class="font-medium">compradores@cakto.com.br</span></div>
+            <div><span class="text-muted">Assunto:</span> <span class="font-medium">Solicitação de cancelamento — FinPilot BI Pro</span></div>
+            <div>
+              <span class="text-muted">Mensagem:</span>
+              <div class="mt-1 p-3 rounded-xl text-xs" style="background:var(--bg-soft);white-space:pre-wrap;">Olá, gostaria de solicitar o cancelamento da minha assinatura do FinPilot BI Pro.
+
+E-mail utilizado na compra:
+<span id="cancelModalEmail" class="font-medium">—</span>
+
+Obrigado.</div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <a id="cancelModalMailtoBtn" href="#" class="btn btn-primary">Abrir meu e-mail</a>
+            <button class="btn" onclick="Account.hideCancelModal()">Voltar</button>
+          </div>
+        </div>
+      </div>
 
     </main>
   </div>
@@ -666,5 +705,6 @@
 <script src="js/charts.js"></script>
 <script src="js/auth.js?v=2"></script>
 <script src="js/account.js"></script>
+<script src="js/efi-checkout.js"></script>
 </body>
 </html>
