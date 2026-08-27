@@ -55,6 +55,7 @@ const Account = {
   },
 
   hasAccess(){
+    if(this.profile?.role === "admin") return true;
     if(!this.subscription) return true;
     const s = this.subscription.status;
     if(s==="active") return true;
