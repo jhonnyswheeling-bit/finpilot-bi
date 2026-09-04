@@ -11,12 +11,19 @@ Object.assign(App, {
     const max=vals.length?Math.max(...vals):0;
     const count=rows.length;
 
+    // "Total de receitas": usa a mesma classificação já existente no
+    // resto do app (coluna "Tipo" === "Receita") — não é uma regra
+    // nova. Média/Maior valor/Registros continuam somando TODOS os
+    // lançamentos, sem alteração.
+    const receitaRows=rows.filter(r=>r["Tipo"]==="Receita");
+    const totalReceitas=receitaRows.reduce((a,r)=>{ const n=parseNumberFlexible(r[m]); return a+(n||0); },0);
+
     let deltaHtml="";
     if(state.periodCol){
-      const byPeriod=this.groupSum(rows,state.periodCol,m);
-      const ordered=this.orderPeriods(Object.keys(byPeriod));
+      const byPeriodReceitas=this.groupSum(receitaRows,state.periodCol,m);
+      const ordered=this.orderPeriods(Object.keys(byPeriodReceitas));
       if(ordered.length>=2){
-        const last=byPeriod[ordered[ordered.length-1]], prev=byPeriod[ordered[ordered.length-2]];
+        const last=byPeriodReceitas[ordered[ordered.length-1]], prev=byPeriodReceitas[ordered[ordered.length-2]];
         const delta = prev!==0 ? ((last-prev)/Math.abs(prev))*100 : (last>0?100:0);
         const up=delta>=0;
         deltaHtml=`<div class="flex items-center gap-1 text-xs font-bold mt-1" style="color:${up?'var(--success)':'var(--danger)'};">${up?ICON_UP:ICON_DOWN} ${Math.abs(delta).toFixed(1)}% vs período anterior</div>`;
@@ -24,7 +31,7 @@ Object.assign(App, {
     }
 
     const cards=[
-      {label:"Total — "+m, value:fmtCurrency(total,true), sub:deltaHtml, icon:"💰", color:"var(--accent)"},
+      {label:"Total de receitas", value:fmtCurrency(totalReceitas,true), sub:deltaHtml, icon:"💰", color:"var(--accent)"},
       {label:"Média por registro", value:fmtCurrency(avg,true), sub:"", icon:"📊", color:"var(--info)"},
       {label:"Maior valor", value:fmtCurrency(max,true), sub:"", icon:"⬆", color:"var(--success)"},
       {label:"Registros", value:count.toLocaleString("pt-BR"), sub:(state.dimCol?this.columnCardText():""), icon:"📋", color:"var(--warning)"},
@@ -109,11 +116,16 @@ Object.assign(App, {
       this.destroyChart("chartComparison");
       const ctx=document.getElementById("chartComparison");
       if(ctx){
-        const last6=ordered.slice(-6);
+        // O gráfico representa só receitas — mesma classificação já
+        // usada no resto do app (coluna "Tipo" === "Receita").
+        const receitaRows=rows.filter(r=>r["Tipo"]==="Receita");
+        const groupedReceitas=this.groupSum(receitaRows,state.periodCol,state.metricCol);
+        const orderedReceitas=this.orderPeriods(Object.keys(groupedReceitas));
+        const last6=orderedReceitas.slice(-6);
         const textColor=this.chartTextColor(), grid=this.chartGridColor();
         state.charts.chartComparison=new Chart(ctx,{
           type:"bar",
-          data:{labels:last6,datasets:[{label:state.metricCol,data:last6.map(k=>grouped[k]),
+          data:{labels:last6,datasets:[{label:"Receitas",data:last6.map(k=>groupedReceitas[k]),
             backgroundColor:last6.map((k,i)=> i===last6.length-1?"#6366f1": i===last6.length-2?"#a5b4fc":"#c7d2fe"),
             borderRadius:8,maxBarThickness:52}]},
           options:{responsive:true,maintainAspectRatio:false,
