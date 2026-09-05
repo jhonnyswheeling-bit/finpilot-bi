@@ -91,9 +91,21 @@
   .switch .knob{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:999px;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);}
   .switch.on .knob{transform:translateX(18px);}
 
+  #fabAddEntry{
+    position:fixed; right:1.25rem; bottom:1.5rem; z-index:35;
+    width:56px; height:56px; border-radius:999px; border:none;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#fff; font-size:28px; line-height:1; font-weight:600;
+    box-shadow:var(--shadow), 0 6px 16px -4px rgba(99,102,241,.5);
+    cursor:pointer; transition:transform .15s ease, box-shadow .15s ease;
+  }
+  #fabAddEntry:hover{transform:translateY(-2px);}
+  #fabAddEntry:active{transform:scale(.95);}
+
   @media print{
     body{background:#fff !important;color:#000 !important;}
-    #sidebar,#topbar,#sidebarOverlay,.no-print{display:none !important;}
+    #sidebar,#topbar,#sidebarOverlay,#fabAddEntry,.no-print{display:none !important;}
     #appView{display:block !important;}
     #mainContent{padding:0 !important;overflow:visible !important;}
     .card{box-shadow:none !important;border:1px solid #ccc !important;break-inside:avoid;}
