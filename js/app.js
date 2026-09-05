@@ -503,11 +503,121 @@ const App = {
 
       this.populateSelectors();
       this.goSection("dashboard");
+
+      // Depois de mostrar o dashboard normalmente (comportamento
+      // inalterado), oferece a opção de persistir os dados importados
+      // na conta do usuário. Se o usuário cancelar, nada muda em
+      // relação ao comportamento de sempre — os dados continuam só
+      // em memória nesta sessão.
+      this.showImportSaveModal();
     }catch(err){
       console.error("Erro ao gerar dashboard:", err);
       alert("Ocorreu um erro ao gerar o dashboard: "+err.message+"\n\nAbra o console do navegador (F12) para mais detalhes.");
     }
   },
+
+  // ---------------- Persistência dos dados importados (manual_entries) ----------------
+  showImportSaveModal(){
+    const rows = state.uploadedFinalData||[];
+    if(!rows.length) return; // nada importado nesta sessão (ex: só lançamentos manuais)
+
+    const receitas = rows.filter(r=>r["Tipo"]==="Receita")
+      .reduce((a,r)=>a+(parseNumberFlexible(r[state.metricCol])||0),0);
+    const despesas = rows.filter(r=>["Gasto Fixo","Gasto Variável","Extra","Outro","Investimento"].includes(r["Tipo"]))
+      .reduce((a,r)=>a+(parseNumberFlexible(r[state.metricCol])||0),0);
+
+    let periodoTxt="";
+    if(state.periodCol){
+      const periodos=[...new Set(rows.map(r=>r[state.periodCol]).filter(v=>v!=null && v!==""))];
+      if(periodos.length) periodoTxt=" Período: "+periodos.join(", ")+".";
+    }
+
+    const summaryEl=$("importSaveSummary");
+    if(summaryEl){
+      summaryEl.textContent =
+        "Encontramos "+rows.length+" lançamento(s). Receitas: "+fmtCurrency(receitas)+
+        ". Despesas: "+fmtCurrency(despesas)+"."+periodoTxt+
+        " Seus dados serão salvos na sua conta FinPilot.";
+    }
+    const modal=$("importSaveModal");
+    if(modal) modal.classList.remove("hidden");
+  },
+
+  skipImportSave(){
+    const modal=$("importSaveModal");
+    if(modal) modal.classList.add("hidden");
+  },
+
+  // Converte uma linha genérica importada (schema Tipo/Categoria/
+  // Subcategoria/Item/Mês(periodCol)/Ano/Valor(metricCol)) no payload
+  // que manual_entries espera — o inverso de mapManualEntry().
+  mapRowToEntryPayload(row){
+    const tiposValidos=["Receita","Investimento","Gasto Fixo","Gasto Variável","Extra","Outro"];
+    const tipo = String(row["Tipo"]||"").trim();
+    const mesRaw = String(row[state.periodCol||"Mês"]||"").trim();
+    const mes = MONTHS_DISPLAY.find(m=>m.toLowerCase()===mesRaw.toLowerCase()) || null;
+    const item = String(row["Item"]||"").trim();
+    const valor = parseNumberFlexible(row[state.metricCol]);
+    const anoRaw = parseInt(row["Ano"],10);
+    const ano = Number.isFinite(anoRaw) ? anoRaw : new Date().getFullYear();
+
+    if(!tiposValidos.includes(tipo) || !mes || !item || valor==null) return null;
+
+    return {
+      tipo, mes, ano, valor,
+      categoria: String(row["Categoria"]||"").trim(),
+      subcategoria: String(row["Subcategoria"]||"").trim(),
+      item
+    };
+  },
+
+  async confirmImportAndSave(){
+    const modal=$("importSaveModal");
+    const rows = state.uploadedFinalData||[];
+
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    if(!session){
+      alert("Sua sessão expirou. Faça login novamente para salvar os lançamentos importados.");
+      if(modal) modal.classList.add("hidden");
+      return;
+    }
+
+    const payloads=[];
+    let invalidas=0;
+    rows.forEach(r=>{
+      const p=this.mapRowToEntryPayload(r);
+      if(p) payloads.push(Object.assign({user_id: session.user.id}, p));
+      else invalidas++;
+    });
+
+    if(!payloads.length){
+      alert("Nenhum lançamento pôde ser salvo — verifique se as colunas Tipo, Mês, Item e Valor estão preenchidas corretamente.");
+      if(modal) modal.classList.add("hidden");
+      return;
+    }
+
+    const { error } = await supabaseClient.from("manual_entries").insert(payloads);
+    if(error){
+      alert("Não foi possível salvar os lançamentos importados. Tente novamente.\n\n"+error.message);
+      return;
+    }
+
+    if(modal) modal.classList.add("hidden");
+
+    // Recarrega do banco (fonte única de verdade) e funde de novo —
+    // os dados importados agora fazem parte de manual_entries, então
+    // uploadedFinalData é zerado pra não duplicar na tela.
+    state.uploadedFinalData=[];
+    await this.loadManualEntries();
+    this.mergeManualEntries();
+    this.renderAll();
+
+    const msg = invalidas>0
+      ? payloads.length+" lançamento(s) salvo(s) com sucesso. "+invalidas+" linha(s) não puderam ser salvas por dados incompletos."
+      : payloads.length+" lançamento(s) salvo(s) com sucesso na sua conta.";
+    alert(msg);
+  },
+
   populateSelectors(){
     const metricSel=$("metricSelect");
     metricSel.innerHTML=state.numericCols.map(c=>`<option value="${esc(c)}" ${c===state.metricCol?'selected':''}>${esc(c)}</option>`).join("");
