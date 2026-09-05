@@ -649,6 +649,19 @@
         </div>
       </section>
 
+      <!-- ============ MODAL: Confirmar importação e salvar ============ -->
+      <div id="importSaveModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,.45);">
+        <div class="card p-6 max-w-md w-full">
+          <h3 class="font-bold text-base mb-3">Salvar lançamentos importados?</h3>
+          <p id="importSaveSummary" class="text-sm text-muted mb-3">—</p>
+          <p class="text-xs text-muted mb-4">Se você já importou esta planilha anteriormente, evite importá-la novamente para não duplicar lançamentos.</p>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-primary" onclick="App.confirmImportAndSave()">Importar e salvar</button>
+            <button class="btn" onclick="App.skipImportSave()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ============ MODAL: Solicitação de cancelamento ============ -->
       <div id="cancelModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,.45);">
         <div class="card p-6 max-w-md w-full">
