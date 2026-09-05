@@ -248,6 +248,10 @@
 <!-- ============ APP VIEW ============ -->
 <div id="appView" class="hidden min-h-screen lg:flex">
   <div id="sidebarOverlay" onclick="App.toggleSidebar(false)"></div>
+
+  <!-- Botão flutuante "+" — só mobile, reaproveita a navegação já
+       existente pra Lançamentos (mesmo formulário, sem lógica nova). -->
+  <button id="fabAddEntry" class="lg:hidden" onclick="App.goSection('entries')" aria-label="Adicionar lançamento">+</button>
   <aside id="sidebar" class="w-64 flex-shrink-0 p-4 flex flex-col gap-1 border-r border-base bg-panel">
     <div class="flex items-center gap-2 px-2 mb-5">
       <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style="background:linear-gradient(135deg,var(--accent),var(--accent-2));">
