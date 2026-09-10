@@ -132,6 +132,26 @@ const Account = {
     return "mailto:" + encodeURIComponent(to) +
       "?subject=" + encodeURIComponent(subject) +
       "&body=" + encodeURIComponent(body);
+  },
+
+  // ---------------- Saldo inicial ----------------
+  // Salva o saldo inicial informado pelo usuário. Mesmo padrão de
+  // saveUserName(): sempre usa session.user.id (nunca aceita id de
+  // input), e só atualiza o estado local depois da confirmação do
+  // Supabase.
+  async saveSaldoInicial(valor){
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    if(!session) return false;
+    const { error } = await supabaseClient
+      .from("profiles")
+      .update({ saldo_inicial: valor })
+      .eq("id", session.user.id);
+    if(error){
+      alert("Não foi possível salvar o saldo inicial. Tente novamente.\n\n"+error.message);
+      return false;
+    }
+    if(this.profile) this.profile.saldo_inicial = valor;
+    return true;
   }
 };
 
