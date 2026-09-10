@@ -5,36 +5,38 @@ Object.assign(App, {
   renderKPIs(){
     const rows=this.getFilteredData();
     const m=state.metricCol;
-    const vals=rows.map(r=>parseNumberFlexible(r[m])).filter(v=>v!=null);
-    const total=vals.reduce((a,b)=>a+b,0);
-    const avg=vals.length?total/vals.length:0;
-    const max=vals.length?Math.max(...vals):0;
-    const count=rows.length;
 
-    // "Total de receitas": usa a mesma classificação já existente no
-    // resto do app (coluna "Tipo" === "Receita") — não é uma regra
-    // nova. Média/Maior valor/Registros continuam somando TODOS os
-    // lançamentos, sem alteração.
-    const receitaRows=rows.filter(r=>r["Tipo"]==="Receita");
-    const totalReceitas=receitaRows.reduce((a,r)=>{ const n=parseNumberFlexible(r[m]); return a+(n||0); },0);
+    // "Entrou/Saiu/Resultado do período" respeitam os filtros ativos
+    // (getFilteredData() já aplica isso) — mesma classificação
+    // entrada/saída já usada no Diagnóstico Financeiro.
+    const {entrada:entFiltrado, saida:saiFiltrado} = this.splitEntradaSaida(rows);
+    const entrouPeriodo = this.sumAbs(entFiltrado);
+    const saiuPeriodo = this.sumAbs(saiFiltrado);
+    const resultadoPeriodo = entrouPeriodo - saiuPeriodo;
 
-    let deltaHtml="";
+    // "Saldo atual" = saldo inicial + histórico completo (não só o
+    // filtrado) até o último período visível no filtro atual — ou
+    // até o período mais recente disponível, se não houver filtro.
+    let periodoReferencia=null;
     if(state.periodCol){
-      const byPeriodReceitas=this.groupSum(receitaRows,state.periodCol,m);
-      const ordered=this.orderPeriods(Object.keys(byPeriodReceitas));
-      if(ordered.length>=2){
-        const last=byPeriodReceitas[ordered[ordered.length-1]], prev=byPeriodReceitas[ordered[ordered.length-2]];
-        const delta = prev!==0 ? ((last-prev)/Math.abs(prev))*100 : (last>0?100:0);
-        const up=delta>=0;
-        deltaHtml=`<div class="flex items-center gap-1 text-xs font-bold mt-1" style="color:${up?'var(--success)':'var(--danger)'};">${up?ICON_UP:ICON_DOWN} ${Math.abs(delta).toFixed(1)}% vs período anterior</div>`;
-      }
+      const periodosNoFiltro=[...new Set(rows.map(r=>String(r[state.periodCol])).filter(v=>v && v!=="null" && v!=="undefined"))];
+      const ordenados=this.orderPeriods(periodosNoFiltro);
+      if(ordenados.length) periodoReferencia=ordenados[ordenados.length-1];
     }
+    const saldoInicialConfigurado = typeof Account!=="undefined" && Account.profile && Account.profile.saldo_inicial!=null;
+    const saldoAtual = this.computeSaldoAcumuladoAte(periodoReferencia);
+
+    const deltaHtml="";
+
+    const saldoValueHtml = saldoInicialConfigurado
+      ? fmtCurrency(saldoAtual,true)
+      : `<span class="text-sm font-semibold" style="color:var(--accent);cursor:pointer;" onclick="App.showSaldoInicialModal()">Configurar saldo inicial</span>`;
 
     const cards=[
-      {label:"Total de receitas", value:fmtCurrency(totalReceitas,true), sub:deltaHtml, icon:"💰", color:"var(--accent)"},
-      {label:"Média por registro", value:fmtCurrency(avg,true), sub:"", icon:"📊", color:"var(--info)"},
-      {label:"Maior valor", value:fmtCurrency(max,true), sub:"", icon:"⬆", color:"var(--success)"},
-      {label:"Registros", value:count.toLocaleString("pt-BR"), sub:(state.dimCol?this.columnCardText():""), icon:"📋", color:"var(--warning)"},
+      {label:"Saldo atual", value:saldoValueHtml, sub:deltaHtml, icon:"💰", color:"var(--accent)"},
+      {label:"Entrou no período", value:fmtCurrency(entrouPeriodo,true), sub:"", icon:"⬆", color:"var(--success)"},
+      {label:"Saiu no período", value:fmtCurrency(saiuPeriodo,true), sub:"", icon:"⬇", color:"var(--danger)"},
+      {label:"Resultado do período", value:fmtCurrency(resultadoPeriodo,true), sub:"", icon:"📊", color:resultadoPeriodo>=0?"var(--success)":"var(--danger)"},
     ];
     $("kpiGrid").innerHTML=cards.map(c=>`
       <div class="card p-4">
@@ -47,6 +49,18 @@ Object.assign(App, {
           <div class="kpi-icon" style="background:${c.color}22;font-size:1.1rem;">${c.icon}</div>
         </div>
       </div>`).join("");
+
+    // Contexto discreto (Parte 9) — deixa claro que é calculado a
+    // partir dos lançamentos, sem sugerir conexão bancária direta.
+    const captionEl=$("kpiCaption");
+    if(captionEl) captionEl.textContent="Saldo calculado com base nos seus lançamentos.";
+
+    // Primeiro acesso: se ainda não configurou o saldo inicial,
+    // oferece a configuração uma vez por sessão, sem ser repetitivo.
+    if(!saldoInicialConfigurado && !state.saldoInicialPromptShown){
+      state.saldoInicialPromptShown=true;
+      this.showSaldoInicialModal();
+    }
   },
   columnCardText(){
     const n=state.columnCardinality[state.dimCol]||0;
@@ -584,6 +598,51 @@ Object.assign(App, {
       else if(t==="saida") saida.push(r);
     });
     return {entrada,saida};
+  },
+
+  // Saldo acumulado = saldo inicial + todas as entradas - todas as
+  // saídas, considerando o HISTÓRICO COMPLETO (não só o filtrado)
+  // em ordem cronológica, até e incluindo periodKey. Se periodKey
+  // for null, soma o histórico inteiro (saldo atual "hoje").
+  computeSaldoAcumuladoAte(periodKey){
+    const saldoInicial = (typeof Account!=="undefined" && Account.profile && Account.profile.saldo_inicial!=null)
+      ? Number(Account.profile.saldo_inicial) : 0;
+    const todosPeriodos=this.getAllPeriodsOrdered();
+    let periodos=todosPeriodos;
+    if(periodKey!=null && todosPeriodos.length){
+      const idx=todosPeriodos.indexOf(String(periodKey));
+      if(idx>=0) periodos=todosPeriodos.slice(0, idx+1);
+    }
+    let entradas=0, saidas=0;
+    const fonteRows = periodos.length ? null : state.finalData; // sem coluna de período: usa tudo
+    if(fonteRows){
+      const {entrada,saida}=this.splitEntradaSaida(fonteRows);
+      entradas=this.sumAbs(entrada); saidas=this.sumAbs(saida);
+    } else {
+      periodos.forEach(p=>{
+        const {entrada,saida}=this.splitEntradaSaida(this.getPeriodRows(p));
+        entradas+=this.sumAbs(entrada); saidas+=this.sumAbs(saida);
+      });
+    }
+    return saldoInicial + entradas - saidas;
+  },
+
+  showSaldoInicialModal(){
+    const modal=$("saldoInicialModal");
+    if(modal) modal.classList.remove("hidden");
+  },
+  hideSaldoInicialModal(){
+    const modal=$("saldoInicialModal");
+    if(modal) modal.classList.add("hidden");
+  },
+  async confirmSaldoInicial(){
+    const input=$("saldoInicialInput");
+    const valor=parseNumberFlexible(input?input.value:null);
+    if(valor==null || isNaN(valor)){ alert("Informe um valor válido."); return; }
+    const ok = await Account.saveSaldoInicial(valor);
+    if(!ok) return;
+    this.hideSaldoInicialModal();
+    this.renderAll();
   },
   sumAbs(rows){
     return rows.reduce((a,r)=>{ const n=parseNumberFlexible(r[state.metricCol]); return a+(n==null?0:Math.abs(n)); },0);
