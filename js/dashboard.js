@@ -4,7 +4,6 @@
 Object.assign(App, {
   renderKPIs(){
     const rows=this.getFilteredData();
-    const m=state.metricCol;
 
     // "Entrou/Saiu/Resultado do período" respeitam os filtros ativos
     // (getFilteredData() já aplica isso) — mesma classificação
@@ -14,26 +13,25 @@ Object.assign(App, {
     const saiuPeriodo = this.sumAbs(saiFiltrado);
     const resultadoPeriodo = entrouPeriodo - saiuPeriodo;
 
-    // "Saldo atual" = saldo inicial + histórico completo (não só o
-    // filtrado) até o último período visível no filtro atual — ou
-    // até o período mais recente disponível, se não houver filtro.
-    let periodoReferencia=null;
-    if(state.periodCol){
-      const periodosNoFiltro=[...new Set(rows.map(r=>String(r[state.periodCol])).filter(v=>v && v!=="null" && v!=="undefined"))];
-      const ordenados=this.orderPeriods(periodosNoFiltro);
-      if(ordenados.length) periodoReferencia=ordenados[ordenados.length-1];
+    // "Saldo atual" — fonte única de verdade (computeSaldoFinanceiro).
+    // Sempre soma do dataset COMPLETO (nunca só o filtrado) para não
+    // fazer um filtro de categoria/item parecer que mudou o saldo
+    // bancário real — só o período (via uptoItem) influencia até onde
+    // a soma vai.
+    const uptoItem = this.pickUptoItemFromRows(rows);
+    const saldoInfo = this.computeSaldoFinanceiro(uptoItem);
+
+    let saldoValueHtml;
+    if(saldoInfo.configurado){
+      saldoValueHtml = fmtCurrency(saldoInfo.saldoAtual,true);
+    } else if(saldoInfo.precisaReferencia){
+      saldoValueHtml = `<span class="text-sm font-semibold" style="color:var(--accent);cursor:pointer;" onclick="App.showSaldoInicialModal()">Confirmar referência</span>`;
+    } else {
+      saldoValueHtml = `<span class="text-sm font-semibold" style="color:var(--accent);cursor:pointer;" onclick="App.showSaldoInicialModal()">Configurar saldo inicial</span>`;
     }
-    const saldoInicialConfigurado = typeof Account!=="undefined" && Account.profile && Account.profile.saldo_inicial!=null;
-    const saldoAtual = this.computeSaldoAcumuladoAte(periodoReferencia);
-
-    const deltaHtml="";
-
-    const saldoValueHtml = saldoInicialConfigurado
-      ? fmtCurrency(saldoAtual,true)
-      : `<span class="text-sm font-semibold" style="color:var(--accent);cursor:pointer;" onclick="App.showSaldoInicialModal()">Configurar saldo inicial</span>`;
 
     const cards=[
-      {label:"Saldo atual", value:saldoValueHtml, sub:deltaHtml, icon:"💰", color:"var(--accent)"},
+      {label:"Saldo atual", value:saldoValueHtml, sub:"", icon:"💰", color:"var(--accent)"},
       {label:"Entrou no período", value:fmtCurrency(entrouPeriodo,true), sub:"", icon:"⬆", color:"var(--success)"},
       {label:"Saiu no período", value:fmtCurrency(saiuPeriodo,true), sub:"", icon:"⬇", color:"var(--danger)"},
       {label:"Resultado do período", value:fmtCurrency(resultadoPeriodo,true), sub:"", icon:"📊", color:resultadoPeriodo>=0?"var(--success)":"var(--danger)"},
@@ -55,9 +53,10 @@ Object.assign(App, {
     const captionEl=$("kpiCaption");
     if(captionEl) captionEl.textContent="Saldo calculado com base nos seus lançamentos.";
 
-    // Primeiro acesso: se ainda não configurou o saldo inicial,
-    // oferece a configuração uma vez por sessão, sem ser repetitivo.
-    if(!saldoInicialConfigurado && !state.saldoInicialPromptShown){
+    // Primeiro acesso / usuário antigo sem referência: oferece a
+    // configuração uma vez por sessão, sem ser repetitivo. NUNCA
+    // inventa uma data de referência sozinho.
+    if(!saldoInfo.configurado && !state.saldoInicialPromptShown){
       state.saldoInicialPromptShown=true;
       this.showSaldoInicialModal();
     }
@@ -603,31 +602,115 @@ Object.assign(App, {
   // Saldo acumulado = saldo inicial + todas as entradas - todas as
   // saídas, considerando o HISTÓRICO COMPLETO (não só o filtrado)
   // em ordem cronológica, até e incluindo periodKey. Se periodKey
-  // for null, soma o histórico inteiro (saldo atual "hoje").
-  computeSaldoAcumuladoAte(periodKey){
-    const saldoInicial = (typeof Account!=="undefined" && Account.profile && Account.profile.saldo_inicial!=null)
-      ? Number(Account.profile.saldo_inicial) : 0;
-    const todosPeriodos=this.getAllPeriodsOrdered();
-    let periodos=todosPeriodos;
-    if(periodKey!=null && todosPeriodos.length){
-      const idx=todosPeriodos.indexOf(String(periodKey));
-      if(idx>=0) periodos=todosPeriodos.slice(0, idx+1);
-    }
-    let entradas=0, saidas=0;
-    const fonteRows = periodos.length ? null : state.finalData; // sem coluna de período: usa tudo
-    if(fonteRows){
-      const {entrada,saida}=this.splitEntradaSaida(fonteRows);
-      entradas=this.sumAbs(entrada); saidas=this.sumAbs(saida);
+  // ---------------- Saldo financeiro — fonte única de verdade ----------------
+
+  // Função NOVA e aditiva: corrige a limitação já conhecida de
+  // orderPeriods()/getAllPeriodsOrdered() (não distinguem ano quando
+  // o período é só o nome do mês). Não altera essas duas funções —
+  // elas continuam sendo usadas por gráficos/deltas que não mudaram.
+  // Quando existe coluna "Ano" nos dados, ordena por ano+mês de
+  // verdade; sem "Ano", cai no comportamento já existente (só mês).
+  getPeriodsAnoMesOrdered(){
+    if(!state.periodCol) return [];
+    const hasAno = state.finalData.some(r=>r["Ano"]!=null && r["Ano"]!=="" && !isNaN(parseInt(r["Ano"],10)));
+    const seen=new Map();
+    state.finalData.forEach(r=>{
+      const mes=r[state.periodCol];
+      if(mes==null || mes==="") return;
+      const ano = hasAno ? parseInt(r["Ano"],10) : null;
+      const key = hasAno ? (ano+"|"+mes) : String(mes);
+      if(!seen.has(key)) seen.set(key,{ano, mes:String(mes)});
+    });
+    const list=[...seen.values()];
+    if(hasAno){
+      list.sort((a,b)=> (a.ano-b.ano) || (monthIndex(a.mes)-monthIndex(b.mes)));
     } else {
-      periodos.forEach(p=>{
-        const {entrada,saida}=this.splitEntradaSaida(this.getPeriodRows(p));
-        entradas+=this.sumAbs(entrada); saidas+=this.sumAbs(saida);
-      });
+      const ordenados=this.orderPeriods(list.map(x=>x.mes));
+      list.sort((a,b)=>ordenados.indexOf(a.mes)-ordenados.indexOf(b.mes));
     }
-    return saldoInicial + entradas - saidas;
+    return list;
+  },
+  getRowsForAnoMes(item){
+    return state.finalData.filter(r=>{
+      if(String(r[state.periodCol])!==item.mes) return false;
+      if(item.ano==null) return true;
+      return parseInt(r["Ano"],10)===item.ano;
+    });
+  },
+  // A partir de um conjunto de linhas (já filtrado por período, se
+  // houver filtro ativo), acha o par {ano,mes} mais recente presente
+  // nelas — usado como limite de "até onde" o saldo acumulado soma.
+  pickUptoItemFromRows(rows){
+    if(!state.periodCol || !rows.length) return null;
+    const hasAno = state.finalData.some(r=>r["Ano"]!=null && r["Ano"]!=="" && !isNaN(parseInt(r["Ano"],10)));
+    const seen=new Map();
+    rows.forEach(r=>{
+      const mes=r[state.periodCol];
+      if(mes==null || mes==="") return;
+      const ano = hasAno ? parseInt(r["Ano"],10) : null;
+      const key = hasAno ? (ano+"|"+mes) : String(mes);
+      if(!seen.has(key)) seen.set(key,{ano, mes:String(mes)});
+    });
+    const list=[...seen.values()];
+    if(!list.length) return null;
+    if(hasAno) list.sort((a,b)=> (a.ano-b.ano) || (monthIndex(a.mes)-monthIndex(b.mes)));
+    else { const ordenados=this.orderPeriods(list.map(x=>x.mes)); list.sort((a,b)=>ordenados.indexOf(a.mes)-ordenados.indexOf(b.mes)); }
+    return list[list.length-1];
+  },
+
+  // FONTE ÚNICA DE VERDADE do saldo financeiro. Usada por renderKPIs()
+  // ("Saldo atual") e por renderVisaoGeral() (via a variável passada
+  // pra computeDisponibilidadeHoje() em "Você ainda pode gastar hoje").
+  // Nunca soma o saldo inicial com períodos ANTERIORES à referência
+  // configurada — só nunca inventa a referência sozinho.
+  computeSaldoFinanceiro(uptoItem){
+    const perfil = typeof Account!=="undefined" ? Account.profile : null;
+    if(!perfil || perfil.saldo_inicial==null){
+      return { configurado:false, precisaReferencia:false };
+    }
+    if(!perfil.saldo_inicial_referencia){
+      return { configurado:false, precisaReferencia:true };
+    }
+    const saldoInicial=Number(perfil.saldo_inicial)||0;
+    const ref=new Date(perfil.saldo_inicial_referencia+"T00:00:00");
+    const refIdx=ref.getFullYear()*12+ref.getMonth();
+
+    const periodos=this.getPeriodsAnoMesOrdered();
+    let entradas=0, saidas=0;
+    periodos.forEach(p=>{
+      if(p.ano!=null){
+        const pIdx=p.ano*12+monthIndex(p.mes);
+        if(pIdx<refIdx) return; // antes da referência: NUNCA soma de novo
+        if(uptoItem && uptoItem.ano!=null){
+          const upIdx=uptoItem.ano*12+monthIndex(uptoItem.mes);
+          if(pIdx>upIdx) return;
+        }
+      } else if(uptoItem && monthIndex(p.mes)>monthIndex(uptoItem.mes)){
+        return; // sem coluna Ano: melhor esforço, compara só pelo mês
+      }
+      const {entrada,saida}=this.splitEntradaSaida(this.getRowsForAnoMes(p));
+      entradas+=this.sumAbs(entrada); saidas+=this.sumAbs(saida);
+    });
+    return { configurado:true, saldoAtual: saldoInicial + entradas - saidas };
   },
 
   showSaldoInicialModal(){
+    const perfil = typeof Account!=="undefined" ? Account.profile : null;
+    const tituloEl=$("saldoInicialModalTitulo"), textoEl=$("saldoInicialModalTexto"),
+          valorInput=$("saldoInicialInput"), mesSel=$("saldoInicialMesSelect"), anoInput=$("saldoInicialAnoInput");
+    const hoje=new Date();
+    if(mesSel && !mesSel.value) mesSel.value=MONTHS_DISPLAY[hoje.getMonth()];
+    if(anoInput && !anoInput.value) anoInput.value=hoje.getFullYear();
+
+    if(perfil && perfil.saldo_inicial!=null && !perfil.saldo_inicial_referencia){
+      // Usuário antigo: já tem valor, só falta a referência.
+      if(tituloEl) tituloEl.textContent="Confirme a referência do seu saldo inicial";
+      if(textoEl) textoEl.textContent="Precisamos confirmar a partir de qual mês esse saldo inicial deve ser considerado.";
+      if(valorInput) valorInput.value=perfil.saldo_inicial;
+    } else {
+      if(tituloEl) tituloEl.textContent="Configure seu saldo inicial";
+      if(textoEl) textoEl.textContent="Para calcular seu saldo atual, informe quanto dinheiro você possuía no início do mês de referência.";
+    }
     const modal=$("saldoInicialModal");
     if(modal) modal.classList.remove("hidden");
   },
@@ -636,10 +719,15 @@ Object.assign(App, {
     if(modal) modal.classList.add("hidden");
   },
   async confirmSaldoInicial(){
-    const input=$("saldoInicialInput");
-    const valor=parseNumberFlexible(input?input.value:null);
+    const valorInput=$("saldoInicialInput"), mesSel=$("saldoInicialMesSelect"), anoInput=$("saldoInicialAnoInput");
+    const valor=parseNumberFlexible(valorInput?valorInput.value:null);
+    const mes=mesSel?mesSel.value:null;
+    const ano=anoInput?parseInt(anoInput.value,10):null;
     if(valor==null || isNaN(valor)){ alert("Informe um valor válido."); return; }
-    const ok = await Account.saveSaldoInicial(valor);
+    const mesIdx = mes!=null ? monthIndex(mes) : -1;
+    if(mesIdx<0 || !ano || isNaN(ano)){ alert("Selecione o mês e o ano de referência."); return; }
+    const dataRef = `${ano}-${String(mesIdx+1).padStart(2,"0")}-01`;
+    const ok = await Account.saveSaldoInicial(valor, dataRef);
     if(!ok) return;
     this.hideSaldoInicialModal();
     this.renderAll();
@@ -834,7 +922,14 @@ Object.assign(App, {
     const maiorGasto=entriesSaidaAtual[0]||null;
     const shareMaiorGasto = maiorGasto && despesaAtual>0 ? (maiorGasto[1]/despesaAtual*100) : 0;
 
-    const disp=this.computeDisponibilidadeHoje(saldoAtual, metasAtivas);
+    // "Você ainda pode gastar hoje" precisa do SALDO REAL (com saldo
+    // inicial), não do resultado isolado do mês. Se o saldo inicial
+    // ainda não estiver configurado, cai no comportamento anterior
+    // (resultado do mês) pra não quebrar a experiência de quem ainda
+    // não configurou nada.
+    const saldoInfoVisaoGeral=this.computeSaldoFinanceiro(null);
+    const saldoParaDisponibilidade = saldoInfoVisaoGeral.configurado ? saldoInfoVisaoGeral.saldoAtual : saldoAtual;
+    const disp=this.computeDisponibilidadeHoje(saldoParaDisponibilidade, metasAtivas);
     const saude=this.computeSaudeFinanceira(saldoAtual, receitaAtual, despesaAtual);
     const recomendacoes=this.gerarRecomendacao({saldoAtual,despesaAtual,mediaEconomia,maiorGasto,metaPrincipal,periods});
     const conquistas=this.gerarConquistas({saldoAtual,saldoPassado,periods,metaPrincipal,mediaEconomia});
@@ -875,10 +970,13 @@ Object.assign(App, {
 
     const cards=[];
 
-    // Card 1 — Saldo previsto do mês
-    cards.push(cardShell("Saldo previsto do mês","💰","var(--accent)",`
-      <div class="text-xl font-extrabold" style="color:${saldoAtual>=0?'var(--success)':'var(--danger)'}">${fmtCurrency(saldoAtual,true)}</div>
-      <div class="text-xs text-muted mt-1">Previsão até o fim do mês: <b style="color:${projecao>=0?'var(--text)':'var(--danger)'}">${fmtCurrency(projecao,true)}</b></div>
+    // Card 1 — Previsão de saldo até o fim do mês. NÃO é o saldo real
+    // (esse é o card "Saldo atual" do bloco principal, no topo da
+    // tela) — é uma extrapolação de como este MÊS deve fechar,
+    // mantendo o ritmo atual de entradas/saídas.
+    cards.push(cardShell("Previsão de saldo até o fim do mês","📈","var(--accent)",`
+      <div class="text-xl font-extrabold" style="color:${projecao>=0?'var(--success)':'var(--danger)'}">${fmtCurrency(projecao,true)}</div>
+      <div class="text-xs text-muted mt-1">Extrapolação do resultado deste mês mantendo o ritmo atual.</div>
     `, projecao<0));
 
     // Card 2 — Quanto posso gastar hoje?
