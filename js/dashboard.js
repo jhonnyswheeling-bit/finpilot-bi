@@ -61,6 +61,60 @@ Object.assign(App, {
       this.showSaldoInicialModal();
     }
   },
+
+  // Cards do MÊS ATUAL (topo do dashboard) — SEMPRE ignoram os
+  // filtros de análise (usa state.finalData completo, nunca
+  // getFilteredData()). Reaproveita a mesma fonte única de verdade
+  // (computeSaldoFinanceiro/splitEntradaSaida/sumAbs) já usada por
+  // renderKPIs() — nenhum cálculo financeiro duplicado.
+  renderResumoMesAtual(){
+    const grid=$("kpiGridMesAtual");
+    if(!grid) return;
+    if(!state.metricCol || !state.finalData.length){ grid.innerHTML=""; const c=$("kpiCaptionMesAtual"); if(c) c.textContent=""; return; }
+
+    const periodos=this.getPeriodsAnoMesOrdered();
+    const mesAtualItem = periodos.length ? periodos[periodos.length-1] : null;
+    const rowsMesAtual = mesAtualItem ? this.getRowsForAnoMes(mesAtualItem) : state.finalData;
+
+    const {entrada,saida} = this.splitEntradaSaida(rowsMesAtual);
+    const entrouMes = this.sumAbs(entrada);
+    const saiuMes = this.sumAbs(saida);
+    const resultadoMes = entrouMes - saiuMes;
+
+    // "Saldo atual" do topo = saldo financeiro real até o mês atual,
+    // nunca até um período filtrado (por isso uptoItem=mesAtualItem,
+    // nunca vem de getFilteredData()/pickUptoItemFromRows()).
+    const saldoInfo=this.computeSaldoFinanceiro(mesAtualItem);
+    let saldoValueHtml;
+    if(saldoInfo.configurado){
+      saldoValueHtml = fmtCurrency(saldoInfo.saldoAtual,true);
+    } else if(saldoInfo.precisaReferencia){
+      saldoValueHtml = `<span class="text-sm font-semibold" style="color:var(--accent);cursor:pointer;" onclick="App.showSaldoInicialModal()">Confirmar referência</span>`;
+    } else {
+      saldoValueHtml = `<span class="text-sm font-semibold" style="color:var(--accent);cursor:pointer;" onclick="App.showSaldoInicialModal()">Configurar saldo inicial</span>`;
+    }
+
+    const cards=[
+      {label:"Saldo atual", value:saldoValueHtml, icon:"💰", color:"var(--accent)"},
+      {label:"Entrou no mês", value:fmtCurrency(entrouMes,true), icon:"⬆", color:"var(--success)"},
+      {label:"Saiu no mês", value:fmtCurrency(saiuMes,true), icon:"⬇", color:"var(--danger)"},
+      {label:"Resultado do mês", value:fmtCurrency(resultadoMes,true), icon:"📊", color:resultadoMes>=0?"var(--success)":"var(--danger)"},
+    ];
+    grid.innerHTML=cards.map(c=>`
+      <div class="card p-4">
+        <div class="flex items-start justify-between">
+          <div class="min-w-0">
+            <div class="text-xs text-muted font-semibold truncate">${esc(c.label)}</div>
+            <div class="text-xl md:text-2xl font-extrabold mt-1 truncate">${c.value}</div>
+          </div>
+          <div class="kpi-icon" style="background:${c.color}22;font-size:1.1rem;">${c.icon}</div>
+        </div>
+      </div>`).join("");
+
+    const captionEl=$("kpiCaptionMesAtual");
+    if(captionEl) captionEl.textContent="Saldo calculado com base nos seus lançamentos.";
+  },
+
   columnCardText(){
     const n=state.columnCardinality[state.dimCol]||0;
     return `<div class="text-xs text-muted mt-1">${n} categorias em ${esc(state.dimCol)}</div>`;
@@ -1106,6 +1160,7 @@ Object.assign(App, {
       this.renderFiltersBar("filtersBarTable");
       if(state.currentSection==="dashboard"){
         this.renderVisaoGeral();
+        this.renderResumoMesAtual();
         this.renderResumoMesPassado();
         this.renderKPIs();
         this.renderTimeChart();
