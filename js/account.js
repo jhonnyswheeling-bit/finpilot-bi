@@ -139,18 +139,18 @@ const Account = {
   // saveUserName(): sempre usa session.user.id (nunca aceita id de
   // input), e só atualiza o estado local depois da confirmação do
   // Supabase.
-  async saveSaldoInicial(valor){
+  async saveSaldoInicial(valor, dataReferencia){
     const { data:{ session } } = await supabaseClient.auth.getSession();
     if(!session) return false;
     const { error } = await supabaseClient
       .from("profiles")
-      .update({ saldo_inicial: valor })
+      .update({ saldo_inicial: valor, saldo_inicial_referencia: dataReferencia })
       .eq("id", session.user.id);
     if(error){
       alert("Não foi possível salvar o saldo inicial. Tente novamente.\n\n"+error.message);
       return false;
     }
-    if(this.profile) this.profile.saldo_inicial = valor;
+    if(this.profile){ this.profile.saldo_inicial = valor; this.profile.saldo_inicial_referencia = dataReferencia; }
     return true;
   }
 };
